@@ -13,12 +13,6 @@
 
 import {init as initEngine, preinit, transpileStyleSheet} from './engine.js';
 
-interface StyleSheetState {
-  revert(): void;
-  errors: string[];
-}
-
-const STYLESHEETS: StyleSheetState[] = [];
 let sheetObserver: MutationObserver | null;
 
 function init() {
@@ -47,32 +41,17 @@ function init() {
   function handleStyleTag(el: HTMLStyleElement) {
     // Don’t touch empty style tags.
     if (el.innerHTML.trim().length === 0) return;
-    const src = el.innerHTML;
     el.innerHTML = transpileStyleSheet(el.innerHTML);
-
-    STYLESHEETS.push({
-      revert: () => {
-        el.innerHTML = src;
-      },
-      errors: [],
-    });
   }
 
   async function handleLinkedStylesheet(el: HTMLLinkElement) {
     if (el.rel !== 'stylesheet') return;
-    const originalUrl = el.href;
     const srcUrl = new URL(el.href, document.baseURI);
     if (srcUrl.origin !== location.origin) return;
     const src = await fetch(srcUrl.toString()).then(r => r.text());
     const newSrc = transpileStyleSheet(src, srcUrl.toString());
     const blob = new Blob([newSrc], {type: 'text/css'});
     el.href = URL.createObjectURL(blob);
-    STYLESHEETS.push({
-      revert: () => {
-        el.href = originalUrl;
-      },
-      errors: [],
-    });
   }
 
   const oldSupports = CSS.supports;
@@ -90,27 +69,6 @@ function init() {
 }
 
 const supportsContainerQueries = 'container' in document.documentElement.style;
-(window as any).cqfillRevert = function cqfillRevert(): Promise<string[]> {
-  if (supportsContainerQueries) {
-    return Promise.resolve([]);
-  }
-  let errors: string[] = [];
-  STYLESHEETS.forEach(s => {
-    errors = errors.concat(s.errors);
-    s.revert();
-  });
-  STYLESHEETS.length = 0;
-
-  return new Promise(resolve => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        init();
-        resolve(errors);
-      });
-    });
-  });
-};
-
 if (!supportsContainerQueries) {
   init();
 }

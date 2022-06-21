@@ -63,8 +63,8 @@ interface RawLayoutState {
   names: string;
   writingMode: string;
   fontSize: string;
-  inlineSize: string;
-  blockSize: string;
+  width: string;
+  height: string;
 }
 
 interface LayoutState {
@@ -72,8 +72,8 @@ interface LayoutState {
   names: Set<string>;
   writingMode: WritingMode;
   fontSize: number;
-  inlineSize: number;
-  blockSize: number;
+  width: number;
+  height: number;
   rootFontSize: number;
 }
 
@@ -93,7 +93,10 @@ function uid(): string {
   ).join('');
 }
 
-function getWritingMode(value: string): WritingMode {
+function getWritingMode(value?: string): WritingMode {
+  if (!value || value.length === 0) {
+    return WritingMode.Horizontal;
+  }
   const lowerValue = value.toLowerCase();
   if (lowerValue.startsWith('horizontal')) {
     return WritingMode.Horizontal;
@@ -116,28 +119,22 @@ function createOrUpdateContainer(
   container: Container | null,
   rootFontSize: number
 ) {
-  const styles = container?.styles ?? window.getComputedStyle(el);
-  const tmpRawLayoutState = styles
-    ? {
-        type: styles.getPropertyValue(CUSTOM_PROPERTY_TYPE),
-        names: styles.getPropertyValue(CUSTOM_PROPERTY_NAME),
-        writingMode: styles.writingMode,
-        fontSize: styles.fontSize,
-        inlineSize: styles.inlineSize,
-        blockSize: styles.blockSize,
-      }
-    : null;
+  const styles = container ? container.styles : window.getComputedStyle(el);
+  const rawType = styles.getPropertyValue(CUSTOM_PROPERTY_TYPE);
 
-  if (
-    tmpRawLayoutState == null ||
-    tmpRawLayoutState.type.length === 0 ||
-    (container && ELEMENTS_TO_REMOVE.has(el))
-  ) {
+  if (rawType.length === 0 || (container && ELEMENTS_TO_REMOVE.has(el))) {
     ELEMENT_TO_CONTAINER.delete(el);
     return;
   }
 
-  const rawLayoutState = tmpRawLayoutState;
+  const rawLayoutState = {
+    type: rawType,
+    names: styles.getPropertyValue(CUSTOM_PROPERTY_NAME),
+    writingMode: styles.writingMode,
+    fontSize: styles.fontSize,
+    width: styles.width,
+    height: styles.height,
+  };
   let layoutIsDirty = false;
   function compareAndCompute<K extends keyof (RawLayoutState | LayoutState)>(
     key: K,
@@ -159,8 +156,8 @@ function createOrUpdateContainer(
   );
   const writingMode = compareAndCompute('writingMode', getWritingMode);
   const fontSize = compareAndCompute('fontSize', parsePixelDimension);
-  const inlineSize = compareAndCompute('inlineSize', parsePixelDimension);
-  const blockSize = compareAndCompute('blockSize', parsePixelDimension);
+  const width = compareAndCompute('width', parsePixelDimension);
+  const height = compareAndCompute('height', parsePixelDimension);
 
   let layoutState = container ? container.layoutState : null;
   let conditions = container ? container.conditions : null;
@@ -178,8 +175,8 @@ function createOrUpdateContainer(
       names,
       writingMode,
       fontSize,
-      inlineSize,
-      blockSize,
+      width,
+      height,
       rootFontSize,
     };
 
@@ -197,8 +194,8 @@ function createOrUpdateContainer(
       if (!filtered) {
         match = evaluateContainerCondition(query.condition, {
           type,
-          inlineSize,
-          blockSize,
+          width,
+          height,
           fontSize,
           rootFontSize,
           writingMode,
@@ -233,11 +230,20 @@ function createOrUpdateContainer(
   return areConditionsDirty;
 }
 
+const rootStyles = window.getComputedStyle(document.documentElement);
+let prevRootFontSize: number;
+let prevRawRootFontSize: string;
+
 function onAnimationFrame() {
   requestAnimationFrame(onAnimationFrame);
 
-  const rootStyles = window.getComputedStyle(document.documentElement);
-  const rootFontSize = parsePixelDimension(rootStyles.fontSize);
+  const rawRootFontSize = rootStyles.fontSize;
+  const rootFontSize =
+    rawRootFontSize === prevRawRootFontSize
+      ? prevRootFontSize
+      : parsePixelDimension(rawRootFontSize);
+  prevRootFontSize = rootFontSize;
+  prevRawRootFontSize = rawRootFontSize;
 
   let dirty = ELEMENTS_TO_ADD.size > 0 || ELEMENTS_TO_REMOVE.size > 0;
   for (const [el, container] of ELEMENT_TO_CONTAINER) {
@@ -362,9 +368,7 @@ containerMO.observe(document.documentElement, {
 
 export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
   function transformStylesheet(nodes: Array<Node>): Array<Node> {
-    const res: Node[] = [...nodes.map(transformRule)];
-
-    return res;
+    return nodes.map(transformRule);
   }
 
   function transformRule(node: Node): Node {
@@ -500,10 +504,9 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
             className
           );
 
-          transformedRules.push({
-            ...rule,
-            prelude: styleSelector,
-          });
+          transformedRules.push(
+            Object.assign({}, rule, {prelude: styleSelector})
+          );
           elementSelectors.add(serialize(elementSelector));
         }
 
@@ -524,46 +527,47 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
               value: 'all',
             },
           ],
-          value: {
-            ...node.value,
-            value: [
-              {
-                type: Type.QualifiedRuleNode,
-                prelude: [{type: Type.DelimToken, value: '*'}],
-                value: {
-                  type: Type.SimpleBlockNode,
-                  source: {
-                    type: Type.LeftCurlyBracketToken,
+          value: Object.assign({}, node.value, {
+            value: Array.prototype.concat(
+              [
+                {
+                  type: Type.QualifiedRuleNode,
+                  prelude: [{type: Type.DelimToken, value: '*'}],
+                  value: {
+                    type: Type.SimpleBlockNode,
+                    source: {
+                      type: Type.LeftCurlyBracketToken,
+                    },
+                    value: [
+                      {
+                        type: Type.DeclarationNode,
+                        name: CUSTOM_PROPERTY_TYPE,
+                        value: [
+                          {
+                            type: Type.IdentToken,
+                            value: 'initial',
+                          },
+                        ],
+                        important: false,
+                      },
+                      {
+                        type: Type.DeclarationNode,
+                        name: CUSTOM_PROPERTY_NAME,
+                        value: [
+                          {
+                            type: Type.IdentToken,
+                            value: 'initial',
+                          },
+                        ],
+                        important: false,
+                      },
+                    ],
                   },
-                  value: [
-                    {
-                      type: Type.DeclarationNode,
-                      name: CUSTOM_PROPERTY_TYPE,
-                      value: [
-                        {
-                          type: Type.IdentToken,
-                          value: 'initial',
-                        },
-                      ],
-                      important: false,
-                    },
-                    {
-                      type: Type.DeclarationNode,
-                      name: CUSTOM_PROPERTY_NAME,
-                      value: [
-                        {
-                          type: Type.IdentToken,
-                          value: 'initial',
-                        },
-                      ],
-                      important: false,
-                    },
-                  ],
                 },
-              },
-              ...transformedRules,
-            ],
-          },
+              ],
+              transformedRules
+            ),
+          }),
         };
       }
     }
@@ -573,10 +577,9 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
       name: node.name,
       prelude: node.prelude,
       value: node.value
-        ? {
-            ...node.value,
+        ? Object.assign({}, node.value, {
             value: transformStylesheet(parseStylesheet(node.value.value)),
-          }
+          })
         : null,
     };
   }
@@ -691,10 +694,9 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
     return {
       type: Type.QualifiedRuleNode,
       prelude: node.prelude,
-      value: {
-        ...node.value,
+      value: Object.assign({}, node.value, {
         value: declarations,
-      },
+      }),
     };
   }
 

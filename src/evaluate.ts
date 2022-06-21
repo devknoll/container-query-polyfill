@@ -125,8 +125,8 @@ export const enum ContainerType {
 
 export interface QueryContext {
   type: ContainerType;
-  inlineSize: number;
-  blockSize: number;
+  width: number;
+  height: number;
   fontSize: number;
   rootFontSize: number;
   writingMode: WritingMode;
@@ -136,9 +136,16 @@ function evaluateFeatureValue(
   feature: SizeFeature,
   context: QueryContext
 ): Value {
-  const inlineSize = context.inlineSize;
+  const inlineSize =
+    context.writingMode === WritingMode.Horizontal
+      ? context.width
+      : context.height;
   const blockSize =
-    context.type === ContainerType.Size ? context.blockSize : null;
+    context.type === ContainerType.Size
+      ? context.writingMode === WritingMode.Horizontal
+        ? context.height
+        : context.width
+      : null;
 
   const width =
     context.writingMode === WritingMode.Horizontal ? inlineSize : blockSize;
