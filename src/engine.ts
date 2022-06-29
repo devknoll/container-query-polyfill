@@ -12,7 +12,6 @@
  */
 
 import {
-  parseDeclarationList,
   parseStylesheet,
   serialize,
   tokenize,
@@ -22,11 +21,18 @@ import {
   Node,
   createNodeParser,
   NumberFlag,
+  DeclarationNode,
+  parseDeclaration,
+  BlockType,
+  RuleListBlock,
+  serializeBlock,
+  DimensionToken,
 } from './utils/css.js';
 import {
   ContainerType,
   evaluateContainerCondition,
   ExpressionNode,
+  QueryContext,
   WritingMode,
 } from './evaluate.js';
 import {
@@ -35,65 +41,100 @@ import {
   parseContainerShorthand,
   parseContainerTypeProperty,
 } from './parser.js';
+import {
+  GenericExpressionNode,
+  GenericExpressionType,
+  parseMediaCondition,
+  transformMediaConditionToTokens,
+} from './utils/parse-media-query.js';
 
 interface ContainerQueryDescriptor {
   names: Set<string>;
   condition: ExpressionNode;
-  className: string;
+  uid: string;
   selector: string;
-  activeElements: [Set<Element>, Set<Element>];
 }
 
-const enum QueryResult {
-  FALSE = 0,
-  UNKNOWN = 1,
-  TRUE = 2,
+interface ContainerState {
+  update(contentRect: DOMRectReadOnly): void;
+  setParentResults(
+    results: Map<ContainerQueryDescriptor, boolean> | null
+  ): void;
+  dispose(): void;
 }
 
-interface Container {
-  element: Element;
-  styles: CSSStyleDeclaration;
-  rawLayoutState: RawLayoutState;
-  layoutState: LayoutState;
-  conditions: WeakMap<ContainerQueryDescriptor, QueryResult>;
-}
+let CONTAINER_ID = 0;
 
-interface RawLayoutState {
-  type: string;
-  names: string;
-  writingMode: string;
-  fontSize: string;
-  width: string;
-  height: string;
-}
-
-interface LayoutState {
-  type: ContainerType;
-  names: Set<string>;
-  writingMode: WritingMode;
-  fontSize: number;
-  width: number;
-  height: number;
-  rootFontSize: number;
-}
-
-const CUSTOM_PROPERTY_UID = uid();
-const CUSTOM_PROPERTY_TYPE = `--cq-container-type-${CUSTOM_PROPERTY_UID}`;
-const CUSTOM_PROPERTY_NAME = `--cq-container-name-${CUSTOM_PROPERTY_UID}`;
-
-const ELEMENT_TO_CONTAINER: Map<Element, Container> = new Map();
-const ELEMENTS_TO_ADD: Set<Element> = new Set();
-const ELEMENTS_TO_REMOVE: Set<Element> = new Set();
-
+const ELEMENT_TO_CONTAINER: Map<Element, ContainerState> = new Map();
 const CONTAINER_QUERIES: Set<ContainerQueryDescriptor> = new Set();
 
-function uid(): string {
-  return Array.from({length: 16}, () =>
+const PER_RUN_UID = generateUID();
+const CUSTOM_PROPERTY_SHORTHAND = `--cq-container-${PER_RUN_UID}`;
+const CUSTOM_PROPERTY_TYPE = `--cq-container-type-${PER_RUN_UID}`;
+const CUSTOM_PROPERTY_NAME = `--cq-container-name-${PER_RUN_UID}`;
+const CUSTOM_PROPERTY_SVH = `--cq-svh-${PER_RUN_UID}`;
+const CUSTOM_PROPERTY_SVW = `--cq-svw-${PER_RUN_UID}`;
+const DATA_ATTRIBUTE_NAME = `data-cq-${PER_RUN_UID}`;
+
+const BLOCK_PREFIX = parseStylesheet(
+  Array.from(
+    tokenize(
+      `* { ${CUSTOM_PROPERTY_TYPE}: initial; ${CUSTOM_PROPERTY_NAME}: initial; }`
+    )
+  )
+).value;
+
+interface ComputedValue<T> {
+  (): T;
+}
+
+function atom<T>(fn: () => T): ComputedValue<T> {
+  return fn;
+}
+
+interface MemoizedValue<T> {
+  dependencies: Array<[ComputedValue<unknown>, unknown]>;
+  value: T;
+}
+
+function areDepsDirty<T>(memoizedValue: MemoizedValue<T>) {
+  for (const dependency of memoizedValue.dependencies) {
+    if (dependency[0]() !== dependency[1]) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function derive<T>(
+  fn: (read: <U>(value: ComputedValue<U>) => U) => T
+): ComputedValue<T> {
+  let memoizedValue: MemoizedValue<T> | null = null;
+
+  return function getDerivedValue() {
+    if (!memoizedValue || areDepsDirty(memoizedValue)) {
+      const dependencies: Array<[ComputedValue<unknown>, unknown]> = [];
+      const value = fn(value => {
+        const res = value();
+        dependencies.push([value, res]);
+        return res;
+      });
+
+      memoizedValue = {dependencies, value};
+    }
+
+    return memoizedValue.value;
+  };
+}
+
+function generateUID(): string {
+  return Array.from({length: 4}, () =>
     Math.floor(Math.random() * 256).toString(16)
   ).join('');
 }
 
-function getWritingMode(value?: string): WritingMode {
+function parseWritingMode(value?: string): WritingMode {
   if (!value || value.length === 0) {
     return WritingMode.Horizontal;
   }
@@ -110,216 +151,13 @@ function getWritingMode(value?: string): WritingMode {
   }
 }
 
-function parsePixelDimension(value: string): number {
-  return parseInt(value.slice(0, -2));
-}
-
-function createOrUpdateContainer(
-  el: Element,
-  container: Container | null,
-  rootFontSize: number
-) {
-  const styles = container ? container.styles : window.getComputedStyle(el);
-  const rawType = styles.getPropertyValue(CUSTOM_PROPERTY_TYPE);
-
-  if (rawType.length === 0 || (container && ELEMENTS_TO_REMOVE.has(el))) {
-    ELEMENT_TO_CONTAINER.delete(el);
-    return;
-  }
-
-  const rawLayoutState = {
-    type: rawType,
-    names: styles.getPropertyValue(CUSTOM_PROPERTY_NAME),
-    writingMode: styles.writingMode,
-    fontSize: styles.fontSize,
-    width: styles.width,
-    height: styles.height,
-  };
-  let layoutIsDirty = false;
-  function compareAndCompute<K extends keyof (RawLayoutState | LayoutState)>(
-    key: K,
-    compute: (val: RawLayoutState[K]) => LayoutState[K]
-  ): LayoutState[K] {
-    const val = rawLayoutState[key];
-    if (!container || val !== container.rawLayoutState[key]) {
-      layoutIsDirty = true;
-      return compute(val);
-    } else {
-      return container.layoutState[key];
+function findParentContainerElement(el: Element | null): Element | undefined {
+  if (el) {
+    if (ELEMENT_TO_CONTAINER.has(el)) {
+      return el;
     }
+    return findParentContainerElement(el.parentElement);
   }
-
-  const type = compareAndCompute('type', s => parseInt(s) as ContainerType);
-  const names = compareAndCompute(
-    'names',
-    s => new Set(s.length === 0 ? [] : s.split(' '))
-  );
-  const writingMode = compareAndCompute('writingMode', getWritingMode);
-  const fontSize = compareAndCompute('fontSize', parsePixelDimension);
-  const width = compareAndCompute('width', parsePixelDimension);
-  const height = compareAndCompute('height', parsePixelDimension);
-
-  let layoutState = container ? container.layoutState : null;
-  let conditions = container ? container.conditions : null;
-  let areConditionsDirty = false;
-  const prevConditions = conditions;
-
-  if (
-    layoutIsDirty ||
-    !conditions ||
-    !layoutState ||
-    layoutState.rootFontSize !== rootFontSize
-  ) {
-    layoutState = {
-      type,
-      names,
-      writingMode,
-      fontSize,
-      width,
-      height,
-      rootFontSize,
-    };
-
-    conditions = new WeakMap();
-    for (const query of CONTAINER_QUERIES) {
-      let filtered = false;
-      for (const name of query.names) {
-        if (!names.has(name)) {
-          filtered = true;
-          break;
-        }
-      }
-
-      let match = QueryResult.UNKNOWN;
-      if (!filtered) {
-        match = evaluateContainerCondition(query.condition, {
-          type,
-          width,
-          height,
-          fontSize,
-          rootFontSize,
-          writingMode,
-        })
-          ? QueryResult.TRUE
-          : QueryResult.FALSE;
-      }
-
-      if (!prevConditions || prevConditions.get(query) !== match) {
-        areConditionsDirty = true;
-      }
-
-      conditions.set(query, match);
-    }
-  }
-
-  if (!container) {
-    container = {
-      element: el,
-      styles,
-      rawLayoutState,
-      layoutState,
-      conditions,
-    };
-    ELEMENT_TO_CONTAINER.set(el, container);
-  } else {
-    container.rawLayoutState = rawLayoutState;
-    container.layoutState = layoutState;
-    container.conditions = conditions;
-  }
-
-  return areConditionsDirty;
-}
-
-const rootStyles = window.getComputedStyle(document.documentElement);
-let prevRootFontSize: number;
-let prevRawRootFontSize: string;
-
-function onAnimationFrame() {
-  requestAnimationFrame(onAnimationFrame);
-
-  const rawRootFontSize = rootStyles.fontSize;
-  const rootFontSize =
-    rawRootFontSize === prevRawRootFontSize
-      ? prevRootFontSize
-      : parsePixelDimension(rawRootFontSize);
-  prevRootFontSize = rootFontSize;
-  prevRawRootFontSize = rawRootFontSize;
-
-  let dirty = ELEMENTS_TO_ADD.size > 0 || ELEMENTS_TO_REMOVE.size > 0;
-  for (const [el, container] of ELEMENT_TO_CONTAINER) {
-    dirty = createOrUpdateContainer(el, container, rootFontSize) || dirty;
-  }
-  for (const el of ELEMENTS_TO_ADD) {
-    dirty = createOrUpdateContainer(el, null, rootFontSize) || dirty;
-  }
-
-  if (dirty) {
-    const parentCache = new WeakMap<Element, Container | null>();
-
-    for (const query of CONTAINER_QUERIES) {
-      const [oldElems, newElems] = query.activeElements;
-      const elems =
-        query.selector.length > 0
-          ? document.querySelectorAll(query.selector)
-          : [];
-
-      for (const el of elems) {
-        let container = findParentContainer(el, parentCache);
-        let result = QueryResult.UNKNOWN;
-
-        while (container) {
-          const localResult = container.conditions.get(query);
-          if (localResult != null && localResult !== QueryResult.UNKNOWN) {
-            result = localResult;
-            break;
-          }
-          container = findParentContainer(
-            container.element.parentElement,
-            parentCache
-          );
-        }
-
-        if (result) {
-          el.classList.add(query.className);
-          newElems.add(el);
-          oldElems.delete(el);
-        }
-      }
-
-      for (const el of oldElems) {
-        el.classList.remove(query.className);
-      }
-      oldElems.clear();
-      query.activeElements = [newElems, oldElems];
-    }
-  }
-
-  ELEMENTS_TO_ADD.clear();
-  ELEMENTS_TO_REMOVE.clear();
-}
-
-// Start at the end of the current task, as the
-// next frame will be too late.
-Promise.resolve().then(onAnimationFrame);
-
-function findParentContainer(
-  el: Element | null,
-  cache: WeakMap<Element, Container | null>
-): Container | null {
-  if (!el) {
-    return null;
-  }
-
-  let container = cache.get(el) || null;
-  if (!container) {
-    container = ELEMENT_TO_CONTAINER.get(el) || null;
-  }
-  if (!container) {
-    container = findParentContainer(el.parentElement, cache);
-  }
-
-  cache.set(el, container);
-  return container;
 }
 
 export function preinit() {
@@ -330,48 +168,17 @@ export function init() {
   // ...
 }
 
-function forEachElement(el: globalThis.Node, fn: (el: Element) => void) {
-  for (const childEl of el.childNodes) {
-    forEachElement(childEl, fn);
-  }
-
-  if (el instanceof HTMLElement) {
-    fn(el);
-  }
-}
-
-const containerMO = new MutationObserver(entries => {
-  for (const entry of entries) {
-    for (const node of entry.removedNodes) {
-      forEachElement(node, el => {
-        ELEMENTS_TO_REMOVE.add(el);
-      });
-    }
-
-    for (const node of entry.addedNodes) {
-      forEachElement(node, el => {
-        ELEMENTS_TO_ADD.add(el);
-      });
-    }
-
-    if (entry.target instanceof HTMLElement) {
-      ELEMENTS_TO_ADD.add(entry.target);
-    }
-  }
-});
-
-containerMO.observe(document.documentElement, {
-  childList: true,
-  subtree: true,
-  attributes: true,
-});
-
 export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
-  function transformStylesheet(nodes: Array<Node>): Array<Node> {
-    return nodes.map(transformRule);
+  function transformStylesheet(node: RuleListBlock): RuleListBlock {
+    return {
+      ...node,
+      value: node.value.map(transformRule),
+    };
   }
 
-  function transformRule(node: Node): Node {
+  function transformRule(
+    node: AtRuleNode | QualifiedRuleNode
+  ): AtRuleNode | QualifiedRuleNode {
     switch (node.type) {
       case Type.AtRuleNode:
         return transformAtRule(node);
@@ -419,7 +226,7 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
 
   function transformSelector(
     nodes: Node[],
-    className: string
+    containerUID: string
   ): [Node[], Node[]] {
     const parser = createNodeParser(nodes);
     const elementSelector: Node[] = [];
@@ -466,8 +273,19 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
           type: Type.FunctionNode,
           name: 'where',
           value: [
-            {type: Type.DelimToken, value: '.'},
-            {type: Type.IdentToken, value: className},
+            {
+              type: Type.BlockNode,
+              source: {type: Type.LeftSquareBracketToken},
+              value: {
+                type: BlockType.SimpleBlock,
+                value: [
+                  {type: Type.IdentToken, value: DATA_ATTRIBUTE_NAME},
+                  {type: Type.DelimToken, value: '~'},
+                  {type: Type.DelimToken, value: '='},
+                  {type: Type.StringToken, value: containerUID},
+                ],
+              },
+            },
           ],
         }
       );
@@ -480,18 +298,83 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
     }
   }
 
-  function transformAtRule(node: AtRuleNode): AtRuleNode {
-    const lowerCaseName = node.name.toLocaleLowerCase();
+  function transformMediaAtRule(node: AtRuleNode): AtRuleNode {
+    return {
+      ...node,
+      value: node.value
+        ? {
+            ...node.value,
+            value: transformStylesheet(parseStylesheet(node.value.value.value)),
+          }
+        : null,
+    };
+  }
 
-    if (lowerCaseName === 'container' && node.value) {
-      const className = `cq_${uid()}`;
-      const result = parseContainerRule(node.prelude);
+  function transformSupportsExpression(
+    node: GenericExpressionNode
+  ): GenericExpressionNode {
+    if (node.type === GenericExpressionType.Negate) {
+      return {
+        ...node,
+        value: transformSupportsExpression(node.value),
+      };
+    } else if (
+      node.type === GenericExpressionType.Conjunction ||
+      node.type === GenericExpressionType.Disjunction
+    ) {
+      return {
+        ...node,
+        left: transformSupportsExpression(node.left),
+        right: transformSupportsExpression(node.right),
+      };
+    } else if (
+      node.type === GenericExpressionType.Literal &&
+      node.value.type === Type.BlockNode
+    ) {
+      const declaration = parseDeclaration(node.value.value.value);
+      if (declaration) {
+        return {
+          ...node,
+          value: {
+            ...node.value,
+            value: {
+              type: BlockType.SimpleBlock,
+              value: [transformPropertyDeclaration(declaration)],
+            },
+          },
+        };
+      }
+    }
+    return node;
+  }
 
-      if (result) {
-        const originalRules: Node[] = transformStylesheet(
-          parseStylesheet(node.value.value)
-        );
-        const transformedRules: Node[] = [];
+  function transformSupportsAtRule(node: AtRuleNode): AtRuleNode {
+    let condition = parseMediaCondition(node.prelude);
+    condition = condition ? transformSupportsExpression(condition) : null;
+
+    return {
+      ...node,
+      prelude: condition
+        ? transformMediaConditionToTokens(condition)
+        : node.prelude,
+      value: node.value
+        ? {
+            ...node.value,
+            value: transformStylesheet(parseStylesheet(node.value.value.value)),
+          }
+        : node.value,
+    };
+  }
+
+  function transformContainerAtRule(node: AtRuleNode): AtRuleNode {
+    if (node.value) {
+      const containerRule = parseContainerRule(node.prelude);
+      if (containerRule) {
+        const uid = `c${CONTAINER_ID++}`;
+        const originalRules = transformStylesheet(
+          parseStylesheet(node.value.value.value)
+        ).value;
+        const transformedRules: Array<QualifiedRuleNode> = [];
         const elementSelectors = new Set<string>();
 
         for (const rule of originalRules) {
@@ -501,21 +384,21 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
 
           const [elementSelector, styleSelector] = transformSelector(
             rule.prelude,
-            className
+            uid
           );
 
-          transformedRules.push(
-            Object.assign({}, rule, {prelude: styleSelector})
-          );
-          elementSelectors.add(serialize(elementSelector));
+          transformedRules.push({
+            ...rule,
+            prelude: styleSelector,
+          });
+          elementSelectors.add(elementSelector.map(serialize).join(''));
         }
 
         CONTAINER_QUERIES.add({
-          names: new Set(result.names),
-          condition: result.condition,
+          names: new Set(containerRule.names),
+          condition: containerRule.condition,
           selector: Array.from(elementSelectors).join(', '),
-          className,
-          activeElements: [new Set(), new Set()],
+          uid,
         });
 
         return {
@@ -527,71 +410,110 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
               value: 'all',
             },
           ],
-          value: Object.assign({}, node.value, {
-            value: Array.prototype.concat(
-              [
-                {
-                  type: Type.QualifiedRuleNode,
-                  prelude: [{type: Type.DelimToken, value: '*'}],
-                  value: {
-                    type: Type.SimpleBlockNode,
-                    source: {
-                      type: Type.LeftCurlyBracketToken,
-                    },
-                    value: [
-                      {
-                        type: Type.DeclarationNode,
-                        name: CUSTOM_PROPERTY_TYPE,
-                        value: [
-                          {
-                            type: Type.IdentToken,
-                            value: 'initial',
-                          },
-                        ],
-                        important: false,
-                      },
-                      {
-                        type: Type.DeclarationNode,
-                        name: CUSTOM_PROPERTY_NAME,
-                        value: [
-                          {
-                            type: Type.IdentToken,
-                            value: 'initial',
-                          },
-                        ],
-                        important: false,
-                      },
-                    ],
-                  },
-                },
-              ],
-              transformedRules
-            ),
-          }),
+          value: {
+            ...node.value,
+            value: {
+              type: BlockType.RuleList,
+              value: [...BLOCK_PREFIX, ...transformedRules],
+            },
+          },
         };
       }
     }
 
+    return node;
+  }
+
+  function transformAtRule(node: AtRuleNode): AtRuleNode {
+    switch (node.name.toLocaleLowerCase()) {
+      case 'media':
+        return transformMediaAtRule(node);
+
+      case 'supports':
+        return transformSupportsAtRule(node);
+
+      case 'container':
+        return transformContainerAtRule(node);
+
+      default:
+        return node;
+    }
+  }
+
+  function transformContainerDimensions(node: DimensionToken): Node {
+    switch (node.unit) {
+      case 'cqw':
+      case 'cqh':
+      case 'cqi':
+      case 'cqb':
+        return {
+          type: Type.FunctionNode,
+          name: 'calc',
+          value: [],
+        };
+
+      case 'cqmin':
+        return {
+          type: Type.FunctionNode,
+          name: 'min',
+          value: [],
+        };
+
+      case 'cqmax':
+        return {
+          type: Type.FunctionNode,
+          name: 'max',
+          value: [],
+        };
+
+      default:
+        return node;
+    }
+  }
+
+  function transformContainerUnits(nodes: ReadonlyArray<Node>): Node[] {
+    return nodes.map(node => {
+      switch (node.type) {
+        case Type.DimensionToken:
+          return transformContainerDimensions(node);
+
+        case Type.FunctionNode:
+          return {
+            ...node,
+            value: transformContainerUnits(node.value),
+          };
+
+        default:
+          return node;
+      }
+    });
+  }
+
+  function transformPropertyDeclaration(
+    node: DeclarationNode
+  ): DeclarationNode {
+    if (node.name === 'container') {
+      const result = parseContainerShorthand(node.value);
+      return result ? {...node, name: CUSTOM_PROPERTY_SHORTHAND} : node;
+    } else if (node.name === 'container-name') {
+      const result = parseContainerNameProperty(node.value);
+      return result ? {...node, name: CUSTOM_PROPERTY_NAME} : node;
+    } else if (node.name === 'container-type') {
+      const result = parseContainerTypeProperty(node.value);
+      return result ? {...node, name: CUSTOM_PROPERTY_TYPE} : node;
+    }
     return {
-      type: Type.AtRuleNode,
-      name: node.name,
-      prelude: node.prelude,
-      value: node.value
-        ? Object.assign({}, node.value, {
-            value: transformStylesheet(parseStylesheet(node.value.value)),
-          })
-        : null,
+      ...node,
+      value: transformContainerUnits(node.value),
     };
   }
 
-  function transformQualifiedRule(node: QualifiedRuleNode): Node {
-    const originalDeclarations = parseDeclarationList(node.value.value);
-    const declarations: Node[] = [];
-
+  function transformQualifiedRule(node: QualifiedRuleNode): QualifiedRuleNode {
+    const declarations: Array<AtRuleNode | DeclarationNode> = [];
     let containerNames: string[] | null = null;
     let containerType: ContainerType | null = null;
 
-    for (const declaration of originalDeclarations) {
+    for (const declaration of node.value.value.value) {
       switch (declaration.type) {
         case Type.AtRuleNode:
           {
@@ -603,35 +525,38 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
           break;
 
         case Type.DeclarationNode:
-          switch (declaration.name) {
-            case 'container': {
-              const result = parseContainerShorthand(declaration.value);
-              if (result != null) {
-                containerNames = result[0];
-                containerType = result[1];
+          {
+            const newDeclaration = transformPropertyDeclaration(declaration);
+            switch (newDeclaration.name) {
+              case CUSTOM_PROPERTY_SHORTHAND: {
+                const result = parseContainerShorthand(declaration.value);
+                if (result != null) {
+                  containerNames = result[0];
+                  containerType = result[1];
+                }
+                break;
               }
-              break;
-            }
 
-            case 'container-name': {
-              const result = parseContainerNameProperty(declaration.value);
-              if (result != null) {
-                containerNames = result;
+              case CUSTOM_PROPERTY_NAME: {
+                const result = parseContainerNameProperty(declaration.value);
+                if (result != null) {
+                  containerNames = result;
+                }
+                break;
               }
-              break;
-            }
 
-            case 'container-type': {
-              const result = parseContainerTypeProperty(declaration.value);
-              if (result != null) {
-                containerType = result;
+              case CUSTOM_PROPERTY_TYPE: {
+                const result = parseContainerTypeProperty(declaration.value);
+                if (result != null) {
+                  containerType = result;
+                }
+                break;
               }
-              break;
-            }
 
-            default:
-              declarations.push(declaration);
-              break;
+              default:
+                declarations.push(newDeclaration);
+                break;
+            }
           }
           break;
       }
@@ -668,6 +593,16 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
               type: Type.IdentToken,
               value: 'size',
             },
+            {type: Type.WhitespaceToken},
+            {
+              type: Type.IdentToken,
+              value: 'layout',
+            },
+            {type: Type.WhitespaceToken},
+            {
+              type: Type.IdentToken,
+              value: 'style',
+            },
           ],
           important: false,
         },
@@ -684,31 +619,309 @@ export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
           important: false,
         }
       );
-
-      const selector = serialize(node.prelude).trim();
-      for (const el of document.querySelectorAll(selector)) {
-        ELEMENTS_TO_ADD.add(el);
-      }
     }
 
     return {
-      type: Type.QualifiedRuleNode,
-      prelude: node.prelude,
-      value: Object.assign({}, node.value, {
-        value: declarations,
-      }),
+      ...node,
+      value: {
+        ...node.value,
+        value: {
+          type: BlockType.StyleBlock,
+          value: declarations,
+        },
+      },
     };
   }
 
   const tokens = Array.from(tokenize(sheetSrc));
   if (srcUrl) {
     // Ensure any URLs are absolute
-    for (const token of tokens) {
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
       if (token.type === Type.URLToken) {
         token.value = new URL(token.value, srcUrl).toString();
+      } else if (
+        token.type === Type.FunctionToken &&
+        token.value.toLowerCase() === 'url'
+      ) {
+        const nextToken = i + 1 < tokens.length ? tokens[i + 1] : null;
+        if (nextToken && nextToken.type === Type.StringToken) {
+          nextToken.value = new URL(nextToken.value, srcUrl).toString();
+        }
       }
     }
   }
 
-  return serialize(transformStylesheet(parseStylesheet(tokens)));
+  return serializeBlock(transformStylesheet(parseStylesheet(tokens, true)));
+}
+
+function hasAllQueryNames(names: Set<string>, query: ContainerQueryDescriptor) {
+  for (const name of query.names) {
+    if (!names.has(name)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const documentElement = document.documentElement;
+const rootEl = document.createElement(`cq-polyfill-${PER_RUN_UID}`);
+const rootStyles = window.getComputedStyle(rootEl);
+
+rootEl.style.cssText =
+  'position: absolute; top: 0; left: 0; right: 0; bottom: 0; visibility: hidden; font-size: 1rem; transition: font-size 1e-8ms;';
+documentElement.appendChild(rootEl);
+
+// We use a separate ResizeObserver for tracking the viewport via
+// rootEl, so we're not littering the code with checks to prevent
+// it from being unobserved.
+const viewportResizeObserver = new ResizeObserver(() => {
+  documentElement.style.setProperty(
+    CUSTOM_PROPERTY_SVW,
+    rootEl.clientWidth + 'px'
+  );
+  documentElement.style.setProperty(
+    CUSTOM_PROPERTY_SVH,
+    rootEl.clientHeight + 'px'
+  );
+});
+viewportResizeObserver.observe(rootEl);
+
+const rawRootFontSize = atom(() => rootStyles.fontSize);
+const rootFontSize = derive(read => parseInt(read(rawRootFontSize)));
+
+const resizeObserver = new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const container = maybeGetOrCreateContainer(entry.target);
+    if (container) {
+      container.update(entry.contentRect);
+    }
+  }
+});
+resizeObserver.observe(rootEl);
+
+function scheduleContainerUpdate(el: Element) {
+  // Schedule the container for an update.
+  resizeObserver.unobserve(el);
+  resizeObserver.observe(el);
+}
+
+function maybeGetOrCreateContainer(el: Element) {
+  let container = ELEMENT_TO_CONTAINER.get(el);
+  if (!container) {
+    const styles = window.getComputedStyle(el);
+    const rawContainerType = atom(() =>
+      styles.getPropertyValue(CUSTOM_PROPERTY_TYPE)
+    );
+
+    if (rawContainerType().length === 0) {
+      resizeObserver.unobserve(el);
+
+      forEachElement(el, function updateChildren(childEl) {
+        if (el !== childEl && childEl instanceof Element) {
+          const childContainer = maybeGetOrCreateContainer(childEl);
+          if (childContainer) {
+            scheduleContainerUpdate(childEl);
+            return false;
+          }
+        }
+        return true;
+      });
+
+      return null;
+    }
+
+    let rawParentResults: Map<ContainerQueryDescriptor, boolean> | null = null;
+    let contentRect: DOMRectReadOnly;
+
+    const rawContainerNames = atom(() =>
+      styles.getPropertyValue(CUSTOM_PROPERTY_NAME)
+    );
+    const rawFontSize = atom(() => styles.getPropertyValue('font-size'));
+    const rawWritingMode = atom(() => styles.getPropertyValue('writing-mode'));
+
+    const containerType = derive(read => {
+      switch (read(rawContainerType)) {
+        case '1':
+          return ContainerType.Size;
+        case '2':
+          return ContainerType.InlineSize;
+        default:
+          return ContainerType.None;
+      }
+    });
+    const containerNames = derive(read => {
+      const names = read(rawContainerNames);
+      return new Set(names.length === 0 ? [] : names.split(' '));
+    });
+    const fontSize = derive(read => parseInt(read(rawFontSize)));
+    const writingMode = derive(read => parseWritingMode(read(rawWritingMode)));
+
+    const width = atom(() => contentRect.width);
+    const height = atom(() => contentRect.height);
+    const parentResults = atom(() => rawParentResults);
+
+    const context: ComputedValue<QueryContext> = derive(read => ({
+      type: read(containerType),
+      fontSize: read(fontSize),
+      rootFontSize: read(rootFontSize),
+      writingMode: read(writingMode),
+      width: read(width),
+      height: read(height),
+    }));
+
+    const containerQueries = atom(() => CONTAINER_QUERIES.values());
+    const getQueryResults = derive(read => {
+      const type = read(containerType);
+      if (type === ContainerType.None) {
+        return null;
+      }
+
+      const res: Map<ContainerQueryDescriptor, boolean> = new Map(
+        read(parentResults)
+      );
+      const ctx = read(context);
+      const names = read(containerNames);
+
+      for (const query of read(containerQueries)) {
+        if (!hasAllQueryNames(names, query)) {
+          continue;
+        }
+        res.set(query, evaluateContainerCondition(query.condition, ctx));
+      }
+
+      return res;
+    });
+
+    container = {
+      update(newContentRect) {
+        contentRect = newContentRect;
+        const localResults = getQueryResults();
+        const results = localResults ? localResults : rawParentResults;
+        const matches: string[] = [];
+
+        forEachElement(el, function updateContainerElements(childEl) {
+          if (childEl instanceof Element) {
+            if (results) {
+              for (const [query, result] of results) {
+                if (result && childEl.matches(query.selector)) {
+                  matches.push(query.uid);
+                }
+              }
+            }
+
+            if (matches.length > 0) {
+              childEl.setAttribute(DATA_ATTRIBUTE_NAME, matches.join(' '));
+              matches.length = 0;
+            } else {
+              childEl.removeAttribute(DATA_ATTRIBUTE_NAME);
+            }
+
+            if (childEl !== el) {
+              const childContainer = maybeGetOrCreateContainer(childEl);
+              if (childContainer) {
+                childContainer.setParentResults(results);
+                scheduleContainerUpdate(childEl);
+                return false;
+              }
+            }
+          }
+
+          return true;
+        });
+
+        if (!results) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          container!.dispose();
+        }
+      },
+      setParentResults(results) {
+        rawParentResults = results;
+      },
+      dispose() {
+        rawParentResults = null;
+        resizeObserver.unobserve(el);
+        ELEMENT_TO_CONTAINER.delete(el);
+      },
+    };
+
+    ELEMENT_TO_CONTAINER.set(el, container);
+  }
+  return container;
+}
+
+['transitionstart', 'transitionend', 'animationstart', 'animationend'].forEach(
+  name => {
+    window.addEventListener(name, e => {
+      if (e.target === rootEl) {
+        for (const el of ELEMENT_TO_CONTAINER.keys()) {
+          scheduleContainerUpdate(el);
+        }
+      } else if (e.target instanceof HTMLElement) {
+        scheduleContainerUpdate(e.target);
+      }
+    });
+  }
+);
+
+export function findNewContainers() {
+  scheduleContainerUpdate(documentElement);
+}
+
+const mutationObserver = new MutationObserver(entries => {
+  for (const entry of entries) {
+    if (
+      entry.attributeName === DATA_ATTRIBUTE_NAME ||
+      entry.target === rootEl
+    ) {
+      continue;
+    } else if (
+      entry.target instanceof HTMLLinkElement ||
+      entry.target instanceof HTMLStyleElement
+    ) {
+      scheduleContainerUpdate(documentElement);
+      continue;
+    }
+
+    for (const node of entry.removedNodes) {
+      forEachElement(node, el => {
+        if (el instanceof HTMLElement) {
+          el.removeAttribute(DATA_ATTRIBUTE_NAME);
+          const container = ELEMENT_TO_CONTAINER.get(el);
+          if (container) {
+            container.dispose();
+          }
+        }
+        return true;
+      });
+    }
+
+    /**
+     * Note: We don't want to traverse through added/updated nodes here,
+     * because we're going to do that in the ResizeObserver.
+     */
+    if (entry.target instanceof Element) {
+      const containerElement = findParentContainerElement(entry.target);
+      scheduleContainerUpdate(
+        containerElement ? containerElement : entry.target
+      );
+    }
+  }
+});
+mutationObserver.observe(document, {
+  childList: true,
+  subtree: true,
+  attributes: true,
+});
+
+function forEachElement(
+  el: globalThis.Node,
+  callback: (el: globalThis.Node) => boolean
+) {
+  callback(el);
+  for (const childEl of el.childNodes) {
+    if (callback(childEl)) {
+      forEachElement(childEl, callback);
+    }
+  }
 }

@@ -50,7 +50,7 @@ export type Node =
   | AtRuleNode
   | QualifiedRuleNode
   | FunctionNode
-  | SimpleBlockNode
+  | BlockNode
   | DeclarationNode;
 
 export const enum Type {
@@ -82,11 +82,11 @@ export const enum Type {
   IdentToken,
 
   /* Node Types */
-  AtRuleNode,
-  QualifiedRuleNode,
-  FunctionNode,
-  SimpleBlockNode,
-  DeclarationNode,
+  AtRuleNode = 'AtRuleNode',
+  QualifiedRuleNode = 'QualifiedRuleNode',
+  FunctionNode = 'FunctionNode',
+  BlockNode = 'BlockNode',
+  DeclarationNode = 'DeclarationNode',
 }
 
 export interface EOFToken {
@@ -207,13 +207,13 @@ export interface AtRuleNode {
   type: Type.AtRuleNode;
   name: string;
   prelude: Node[];
-  value: SimpleBlockNode | null;
+  value: BlockNode | null;
 }
 
 export interface QualifiedRuleNode {
   type: Type.QualifiedRuleNode;
   prelude: Node[];
-  value: SimpleBlockNode;
+  value: BlockNode;
 }
 
 export interface FunctionNode {
@@ -222,10 +222,10 @@ export interface FunctionNode {
   value: Node[];
 }
 
-export interface SimpleBlockNode {
-  type: Type.SimpleBlockNode;
+export interface BlockNode {
+  type: Type.BlockNode;
   source: Node;
-  value: Node[];
+  value: Block;
 }
 
 export interface DeclarationNode {
@@ -233,6 +233,39 @@ export interface DeclarationNode {
   name: string;
   value: Node[];
   important: boolean;
+}
+
+export const enum BlockType {
+  SimpleBlock = 'SimpleBlock',
+  StyleBlock = 'StyleBlock',
+  DeclarationList = 'DeclarationList',
+  RuleList = 'RuleList',
+}
+
+export type Block =
+  | SimpleBlock
+  | StyleBlock
+  | DeclarationListBlock
+  | RuleListBlock;
+
+export interface SimpleBlock {
+  type: BlockType.SimpleBlock;
+  value: Node[];
+}
+
+export interface StyleBlock {
+  type: BlockType.StyleBlock;
+  value: Array<AtRuleNode | QualifiedRuleNode | DeclarationNode>;
+}
+
+export interface DeclarationListBlock {
+  type: BlockType.DeclarationList;
+  value: Array<AtRuleNode | DeclarationNode>;
+}
+
+export interface RuleListBlock {
+  type: BlockType.RuleList;
+  value: Array<AtRuleNode | QualifiedRuleNode>;
 }
 
 export interface Parser<T> {
@@ -951,8 +984,32 @@ const ENDING_TOKEN_MAP: {[key in Type]?: Type} = {
 export function parseStylesheet(
   nodes: ReadonlyArray<Node>,
   topLevel?: boolean
-): Node[] {
-  return consumeRuleList(createNodeParser(nodes), topLevel === false);
+): RuleListBlock {
+  const node = consumeRuleList(createNodeParser(nodes), topLevel === true);
+  return {
+    ...node,
+    value: node.value.map(rule => {
+      return rule.type === Type.QualifiedRuleNode
+        ? reinterpretQualifiedRule(rule, parseStyleBlock)
+        : rule;
+    }),
+  };
+}
+
+function reinterpretQualifiedRule(
+  node: QualifiedRuleNode,
+  callback: (nodes: Node[]) => Block
+) {
+  if (node.value.value.type === BlockType.SimpleBlock) {
+    return {
+      ...node,
+      value: {
+        ...node.value,
+        value: callback(node.value.value.value),
+      },
+    };
+  }
+  return node;
 }
 
 // § 5.3.6. Parse a declaration
@@ -974,8 +1031,15 @@ export function parseDeclaration(
   return declaration;
 }
 
+// § 5.3.7. Parse a style block’s contents
+export function parseStyleBlock(nodes: ReadonlyArray<Node>): StyleBlock {
+  return consumeStyleBlock(createNodeParser(nodes));
+}
+
 // § 5.3.8. Parse a list of declarations
-export function parseDeclarationList(nodes: ReadonlyArray<Node>): Node[] {
+export function parseDeclarationList(
+  nodes: ReadonlyArray<Node>
+): DeclarationListBlock {
   return consumeDeclarationList(createNodeParser(nodes));
 }
 
@@ -986,9 +1050,12 @@ export function consumeWhitespace(parser: Parser<Node>) {
 }
 
 // § 5.4.1. Consume a list of rules
-function consumeRuleList(parser: Parser<Node>, topLevel: boolean): Node[] {
-  const rules: Node[] = [];
-  let rule: Node | null = null;
+function consumeRuleList(
+  parser: Parser<Node>,
+  topLevel: boolean
+): RuleListBlock {
+  const rules: Array<AtRuleNode | QualifiedRuleNode> = [];
+  let rule: AtRuleNode | QualifiedRuleNode | null = null;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -1000,7 +1067,7 @@ function consumeRuleList(parser: Parser<Node>, topLevel: boolean): Node[] {
         break;
 
       case Type.EOFToken:
-        return rules;
+        return {type: BlockType.RuleList, value: rules};
 
       case Type.CDOToken:
       case Type.CDCToken:
@@ -1032,7 +1099,7 @@ function consumeRuleList(parser: Parser<Node>, topLevel: boolean): Node[] {
 }
 
 // § 5.4.2. Consume an at-rule
-function consumeAtRule(parser: Parser<Node>): Node {
+function consumeAtRule(parser: Parser<Node>): AtRuleNode {
   let node = parser.consume(1);
   if (node.type !== Type.AtKeywordToken) {
     throw new Error(`Unexpected type ${node.type}`);
@@ -1061,7 +1128,7 @@ function consumeAtRule(parser: Parser<Node>): Node {
           value: consumeSimpleBlock(parser),
         };
 
-      case Type.SimpleBlockNode:
+      case Type.BlockNode:
         if (node.source.type === Type.LeftCurlyBracketToken) {
           return {type: Type.AtRuleNode, name, prelude, value: node};
         }
@@ -1076,7 +1143,7 @@ function consumeAtRule(parser: Parser<Node>): Node {
 }
 
 // § 5.4.3. Consume a qualified rule
-function consumeQualifiedRule(parser: Parser<Node>): Node | null {
+function consumeQualifiedRule(parser: Parser<Node>): QualifiedRuleNode | null {
   let node = parser.value;
   const prelude: Node[] = [];
 
@@ -1096,7 +1163,7 @@ function consumeQualifiedRule(parser: Parser<Node>): Node | null {
           value: consumeSimpleBlock(parser),
         };
 
-      case Type.SimpleBlockNode:
+      case Type.BlockNode:
         if (node.source.type === Type.LeftCurlyBracketToken) {
           return {
             type: Type.QualifiedRuleNode,
@@ -1114,9 +1181,10 @@ function consumeQualifiedRule(parser: Parser<Node>): Node | null {
   }
 }
 
-// § 5.4.5. Consume a list of declarations
-function consumeDeclarationList(parser: Parser<Node>): Node[] {
-  const declarations: Node[] = [];
+// § 5.4.4. Consume a style block’s contents
+function consumeStyleBlock(parser: Parser<Node>): StyleBlock {
+  const rules: Array<AtRuleNode | QualifiedRuleNode> = [];
+  const declarations: DeclarationNode[] = [];
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -1129,7 +1197,82 @@ function consumeDeclarationList(parser: Parser<Node>): Node[] {
         break;
 
       case Type.EOFToken:
-        return declarations;
+        return {
+          type: BlockType.StyleBlock,
+          value: [...declarations, ...rules],
+        };
+
+      case Type.AtKeywordToken:
+        parser.reconsume();
+        rules.push(consumeAtRule(parser));
+        break;
+
+      case Type.IdentToken: {
+        const temp: Node[] = [node];
+
+        let next = parser.at(1);
+        while (
+          next.type !== Type.SemicolonToken &&
+          next.type !== Type.EOFToken
+        ) {
+          temp.push(consumeComponentValue(parser));
+          next = parser.at(1);
+        }
+
+        const declaration = consumeDeclaration(createNodeParser(temp));
+        if (declaration) {
+          declarations.push(declaration);
+        }
+        break;
+      }
+
+      case Type.DelimToken: {
+        if (node.value === '&') {
+          parser.reconsume();
+          const rule = consumeQualifiedRule(parser);
+          if (rule) {
+            rules.push(rule);
+          }
+          break;
+        }
+      }
+
+      // eslint-disable-next-line no-fallthrough
+      default: {
+        parser.error();
+        parser.reconsume();
+
+        let next = parser.at(1);
+        while (
+          next.type !== Type.SemicolonToken &&
+          next.type !== Type.EOFToken
+        ) {
+          consumeComponentValue(parser);
+          next = parser.at(1);
+        }
+
+        break;
+      }
+    }
+  }
+}
+
+// § 5.4.5. Consume a list of declarations
+function consumeDeclarationList(parser: Parser<Node>): DeclarationListBlock {
+  const declarations: Array<AtRuleNode | DeclarationNode> = [];
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const node = parser.consume(1);
+
+    switch (node.type) {
+      case Type.WhitespaceToken:
+      case Type.SemicolonToken:
+        // Do nothing
+        break;
+
+      case Type.EOFToken:
+        return {type: BlockType.DeclarationList, value: declarations};
 
       case Type.AtKeywordToken:
         parser.reconsume();
@@ -1234,7 +1377,7 @@ function consumeComponentValue(parser: Parser<Node>): Node {
 }
 
 // § 5.4.8. Consume a simple block
-function consumeSimpleBlock(parser: Parser<Node>): SimpleBlockNode {
+function consumeSimpleBlock(parser: Parser<Node>): BlockNode {
   let node = parser.value;
 
   const source = node;
@@ -1251,11 +1394,19 @@ function consumeSimpleBlock(parser: Parser<Node>): SimpleBlockNode {
 
     switch (node.type) {
       case endToken:
-        return {type: Type.SimpleBlockNode, source, value};
+        return {
+          type: Type.BlockNode,
+          source,
+          value: {type: BlockType.SimpleBlock, value},
+        };
 
       case Type.EOFToken:
         parser.error();
-        return {type: Type.SimpleBlockNode, source, value};
+        return {
+          type: Type.BlockNode,
+          source,
+          value: {type: BlockType.SimpleBlock, value},
+        };
 
       default:
         parser.reconsume();
@@ -1301,28 +1452,22 @@ const BLOCK_MAP: {[key in Type]?: [string, string]} = {
   [Type.LeftParenthesisToken]: ['(', ')'],
 };
 
-function serializeInternal(node: Node | Array<Node>, level: number): string {
-  if (Array.isArray(node)) {
-    return node.map(n => serializeInternal(n, level)).join('');
-  }
-
+function serializeInternal(node: Node, level: number): string {
   switch (node.type) {
     case Type.AtRuleNode:
       return `@${node.name} ${node.prelude
         .map(n => serializeInternal(n, 0))
-        .join('')} ${node.value ? serializeInternal(node.value, level) : ''}`;
+        .join('')}${node.value ? serializeInternal(node.value, level) : ''}`;
 
     case Type.QualifiedRuleNode:
       return `${node.prelude
         .map(n => serializeInternal(n, 0))
-        .join('')} ${serializeInternal(node.value, level)}`;
+        .join('')}${serializeInternal(node.value, level)}`;
 
-    case Type.SimpleBlockNode: {
+    case Type.BlockNode: {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const [start, end] = BLOCK_MAP[node.source.type]!;
-      return `${start}${node.value
-        .map(n => serializeInternal(n, level))
-        .join('')}${end}`;
+      return `${start}${serializeBlock(node.value, level)}${end}`;
     }
 
     case Type.FunctionNode:
@@ -1333,7 +1478,7 @@ function serializeInternal(node: Node | Array<Node>, level: number): string {
     case Type.DeclarationNode:
       return `${node.name}:${node.value
         .map(n => serializeInternal(n, 0))
-        .join('')}${node.important ? ' !important' : ''};`;
+        .join('')}${node.important ? ' !important' : ''}`;
 
     case Type.WhitespaceToken:
       return ' ';
@@ -1360,7 +1505,7 @@ function serializeInternal(node: Node | Array<Node>, level: number): string {
       return node.value;
 
     case Type.StringToken:
-      return `"${CSS.escape(node.value)}"`;
+      return `"${node.value}"`;
 
     case Type.CommaToken:
       return ',';
@@ -1379,6 +1524,21 @@ function serializeInternal(node: Node | Array<Node>, level: number): string {
   }
 }
 
-export function serialize(node: Node | Array<Node>): string {
+export function serializeBlock(block: Block, level?: number) {
+  return block.value
+    .map(node => {
+      let res = serializeInternal(node, level || 0);
+      if (
+        node.type === Type.DeclarationNode &&
+        block.type !== BlockType.SimpleBlock
+      ) {
+        res += ';';
+      }
+      return res;
+    })
+    .join('');
+}
+
+export function serialize(node: Node): string {
   return serializeInternal(node, 0);
 }

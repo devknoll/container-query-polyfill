@@ -14,7 +14,9 @@
 export function doubleRaf() {
   return new Promise(resolve => {
     requestAnimationFrame(() => {
-      resolve();
+      requestAnimationFrame(() => {
+        resolve();
+      });
     });
   });
 }
@@ -53,9 +55,9 @@ export async function testSuite(name, cb) {
   try {
     await Promise.race([
       cb(),
-      timeout(2000).then(() => {
-        throw Error(`Timeout`);
-      }),
+      // timeout(2000).then(() => {
+      //   throw Error(`Timeout`);
+      // }),
     ]);
   } catch (e) {
     console.error(e);

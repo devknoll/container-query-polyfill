@@ -11,7 +11,12 @@
  * limitations under the License.
  */
 
-import {init as initEngine, preinit, transpileStyleSheet} from './engine.js';
+import {
+  findNewContainers,
+  init as initEngine,
+  preinit,
+  transpileStyleSheet,
+} from './engine.js';
 
 let sheetObserver: MutationObserver | null;
 
@@ -33,7 +38,7 @@ function init() {
       }
     }
   });
-  sheetObserver.observe(document.documentElement, {
+  sheetObserver.observe(document, {
     childList: true,
     subtree: true,
   });
@@ -41,17 +46,29 @@ function init() {
   function handleStyleTag(el: HTMLStyleElement) {
     // Don’t touch empty style tags.
     if (el.innerHTML.trim().length === 0) return;
+    // TODO: Don't change it unless we need to.
     el.innerHTML = transpileStyleSheet(el.innerHTML);
+    findNewContainers();
   }
 
   async function handleLinkedStylesheet(el: HTMLLinkElement) {
     if (el.rel !== 'stylesheet') return;
+
     const srcUrl = new URL(el.href, document.baseURI);
     if (srcUrl.origin !== location.origin) return;
     const src = await fetch(srcUrl.toString()).then(r => r.text());
+    // TODO: Don't change it unless we need to.
     const newSrc = transpileStyleSheet(src, srcUrl.toString());
     const blob = new Blob([newSrc], {type: 'text/css'});
     el.href = URL.createObjectURL(blob);
+
+    // The `onload` event won't be called again, even if we change
+    // the href. So we use the loading of an image as a proxy.
+    const img = new Image();
+    img.onload = img.onerror = function () {
+      findNewContainers();
+    };
+    img.src = el.href;
   }
 
   const oldSupports = CSS.supports;

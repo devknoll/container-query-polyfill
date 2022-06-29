@@ -119,7 +119,8 @@ export const enum WritingMode {
 }
 
 export const enum ContainerType {
-  Size = 1,
+  None = 0,
+  Size,
   InlineSize,
 }
 

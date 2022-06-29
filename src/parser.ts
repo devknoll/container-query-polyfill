@@ -27,6 +27,11 @@ import {
   Type,
 } from './utils/css.js';
 import {consumeMediaFeature, FeatureType} from './utils/parse-media-feature.js';
+import {
+  consumeMediaCondition,
+  GenericExpressionNode,
+  GenericExpressionType,
+} from './utils/parse-media-query.js';
 
 export interface ContainerRule {
   names: string[];
@@ -42,18 +47,6 @@ const SIZE_FEATURE_MAP: Record<string, SizeFeature> = {
   orientation: SizeFeature.Orientation,
 };
 const FEATURE_NAMES = new Set(Object.keys(SIZE_FEATURE_MAP));
-
-const enum Keyword {
-  NOT = 'not',
-  AND = 'and',
-  OR = 'or',
-  NONE = 'none',
-
-  // CSS-Wide Keywords
-  INITIAL = 'initial',
-  INHERIT = 'inherit',
-  UNSET = 'unset',
-}
 
 function consumeMaybeSeparatedByDelim<A, B>(
   parser: Parser<Node>,
@@ -209,122 +202,6 @@ function parseSizeFeature(parser: Parser<Node>): ExpressionNode | null {
   }
 }
 
-function parseQueryInParens(parser: Parser<Node>): ExpressionNode | null {
-  const node = parser.consume(1);
-
-  switch (node.type) {
-    case Type.SimpleBlockNode: {
-      if (node.source.type !== Type.LeftParenthesisToken) {
-        return null;
-      }
-
-      const maybeContainerCondition = parseContainerCondition(
-        createNodeParser(node.value),
-        false,
-        null
-      );
-      if (maybeContainerCondition) {
-        return maybeContainerCondition;
-      }
-
-      const maybeSizeFeature = parseSizeFeature(createNodeParser(node.value));
-      if (maybeSizeFeature) {
-        return maybeSizeFeature;
-      }
-
-      return {type: ExpressionType.Value, value: {type: ValueType.Unknown}};
-    }
-
-    case Type.FunctionNode:
-      return {type: ExpressionType.Value, value: {type: ValueType.Unknown}};
-
-    default:
-      return null;
-  }
-}
-
-function parseContainerCondition(
-  parser: Parser<Node>,
-  topLevel: boolean,
-  andOr: Keyword.AND | Keyword.OR | null
-): ExpressionNode | null {
-  consumeWhitespace(parser);
-
-  let negated = false;
-  let next: Node = parser.at(1);
-
-  if (
-    topLevel &&
-    next.type !== Type.FunctionNode &&
-    (next.type !== Type.SimpleBlockNode ||
-      next.source.type !== Type.LeftParenthesisToken)
-  ) {
-    // TODO: WPT currently assumes the top level of a condition
-    // is a function or enclosed in parens. Fix this when clarified.
-    return null;
-  }
-
-  if (next.type === Type.IdentToken) {
-    if (next.value.toLowerCase() !== Keyword.NOT) {
-      return null;
-    }
-    parser.consume(1);
-    consumeWhitespace(parser);
-    negated = true;
-  }
-
-  let left = parseQueryInParens(parser);
-  if (left === null) {
-    return null;
-  }
-  left = negated
-    ? {
-        type: ExpressionType.Negate,
-        value: left,
-      }
-    : left;
-
-  consumeWhitespace(parser);
-  next = parser.at(1);
-
-  if (topLevel && next.type !== Type.EOFToken) {
-    // TODO: WPT currently assumes the top level of a condition
-    // is a function or enclosed in parens. Fix this when clarified.
-    return null;
-  }
-
-  const nextAndOr =
-    next.type === Type.IdentToken ? next.value.toLowerCase() : null;
-
-  if (nextAndOr !== null) {
-    parser.consume(1);
-    consumeWhitespace(parser);
-
-    if (
-      (nextAndOr !== Keyword.AND && nextAndOr !== Keyword.OR) ||
-      (andOr !== null && nextAndOr !== andOr)
-    ) {
-      return null;
-    }
-
-    const right = parseContainerCondition(parser, false, nextAndOr);
-    if (right === null) {
-      return null;
-    }
-
-    return {
-      type:
-        nextAndOr === Keyword.AND
-          ? ExpressionType.Conjunction
-          : ExpressionType.Disjunction,
-      left,
-      right,
-    } as ExpressionNode;
-  }
-
-  return parser.at(1).type === Type.EOFToken ? left : null;
-}
-
 function consumeContainerNames(
   parser: Parser<Node>,
   expectEof: boolean
@@ -342,13 +219,13 @@ function consumeContainerNames(
 
     const name = next.value.toLowerCase();
     switch (name) {
-      case Keyword.NOT:
-      case Keyword.AND:
-      case Keyword.OR:
-      case Keyword.NONE:
-      case Keyword.INITIAL:
-      case Keyword.INHERIT:
-      case Keyword.UNSET:
+      case 'not':
+      case 'and':
+      case 'or':
+      case 'none':
+      case 'initial':
+      case 'inherit':
+      case 'unset':
         return null;
 
       default:
@@ -376,6 +253,9 @@ function consumeContainerType(parser: Parser<Node>): ContainerType | null {
   }
 
   switch (node.value.toLowerCase()) {
+    case 'none':
+      return ContainerType.None;
+
     case 'size':
       return ContainerType.Size;
 
@@ -418,7 +298,52 @@ export function parseContainerRule(
 ): ContainerRule | null {
   const parser = createNodeParser(nodes);
   const names = consumeContainerNames(parser, false);
+  const condition = transformExpression(consumeMediaCondition(parser));
 
-  const condition = parseContainerCondition(parser, true, null);
   return names !== null && condition !== null ? {names, condition} : null;
+}
+
+function transformExpression(
+  node: GenericExpressionNode | null
+): ExpressionNode | null {
+  if (!node) {
+    return null;
+  }
+
+  if (node.type === GenericExpressionType.Negate) {
+    const value = transformExpression(node.value);
+    return value
+      ? {
+          type: ExpressionType.Negate,
+          value,
+        }
+      : null;
+  } else if (
+    node.type === GenericExpressionType.Conjunction ||
+    node.type === GenericExpressionType.Disjunction
+  ) {
+    const left = transformExpression(node.left);
+    const right = transformExpression(node.right);
+    return left && right
+      ? {
+          type:
+            node.type === GenericExpressionType.Conjunction
+              ? ExpressionType.Conjunction
+              : ExpressionType.Disjunction,
+          left,
+          right,
+        }
+      : null;
+  } else if (node.type === GenericExpressionType.Literal) {
+    if (node.value.type === Type.BlockNode) {
+      const expression = parseSizeFeature(
+        createNodeParser(node.value.value.value)
+      );
+      if (expression) {
+        return expression;
+      }
+    }
+    return {type: ExpressionType.Value, value: {type: ValueType.Unknown}};
+  }
+  return null;
 }
