@@ -13,6 +13,16 @@
 
 import './engine.js';
 
+(window as any).waitForPolyfill = function() {
+  return new Promise<void>(resolve => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+}
+
 function init() {
   const oldSupports = CSS.supports;
   CSS.supports = (ident: string) => {
