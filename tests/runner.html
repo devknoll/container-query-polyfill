@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=Promise"></script>
+  </head>
+  <body>
+    <style>
+      .js-frame {
+        width: 100%;
+        height: 600px;
+      }
+    </style>
+    <script>
+      function nextEvent(elem, name, predicate) {
+        return new Promise(resolve => {
+          const listener = (...args) => {
+            if (predicate(...args)) {
+              elem.removeEventListener(name, listener);
+              resolve(...args);
+            }
+          };
+          elem.addEventListener(name, listener);
+        });
+      }
+
+      function timeout(ms) {
+        return new Promise(resolve => {
+          setTimeout(resolve, ms);
+        });
+      }
+
+      async function runCqTests(tests) {
+        const iframe = document.createElement('iframe');
+        iframe.className = 'js-frame';
+        document.body.appendChild(iframe);
+
+        const results = [];
+        for (const test of tests.js) {
+          iframe.src = test;
+
+          const res = await Promise.race([
+            nextEvent(
+              window,
+              'message',
+              message => message.data.type === 'complete'
+            ).then(message => message.data),
+            timeout(5 * 1000).then(_ => 'timed out'),
+          ]);
+
+          results.push([test, res]);
+        }
+
+        const scriptElem = document.createElement('script');
+        scriptElem.setAttribute('id', '__test_results__');
+        scriptElem.text = JSON.stringify(results);
+        document.body.appendChild(scriptElem);
+      }
+
+      window.RUN_CQ_TESTS = runCqTests;
+    </script>
+  </body>
+</html>
