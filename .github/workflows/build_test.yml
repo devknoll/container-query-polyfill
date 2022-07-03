@@ -41,5 +41,5 @@ jobs:
         run: |
           npm run serve &
           ./wpt/wpt manifest
-          ./wpt/wpt serve --inject-script=http://bs-local.com:9606/dist/src/cqfill.iife.min.js &
+          ./wpt/wpt serve --inject-script=${{ github.workspace }}/dist/src/cqfill.iife.min.js &
           npm test
