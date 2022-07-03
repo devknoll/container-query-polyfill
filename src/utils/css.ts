@@ -82,11 +82,11 @@ export const enum Type {
   IdentToken,
 
   /* Node Types */
-  AtRuleNode = 'AtRuleNode',
-  QualifiedRuleNode = 'QualifiedRuleNode',
-  FunctionNode = 'FunctionNode',
-  BlockNode = 'BlockNode',
-  DeclarationNode = 'DeclarationNode',
+  AtRuleNode,
+  QualifiedRuleNode,
+  FunctionNode,
+  BlockNode,
+  DeclarationNode,
 }
 
 export interface EOFToken {
@@ -236,10 +236,10 @@ export interface DeclarationNode {
 }
 
 export const enum BlockType {
-  SimpleBlock = 'SimpleBlock',
-  StyleBlock = 'StyleBlock',
-  DeclarationList = 'DeclarationList',
-  RuleList = 'RuleList',
+  SimpleBlock,
+  StyleBlock,
+  DeclarationList,
+  RuleList,
 }
 
 export type Block =
@@ -1490,13 +1490,13 @@ function serializeInternal(node: Node, level: number): string {
       return ':';
 
     case Type.HashToken:
-      return `#${node.value}`;
+      return '#' + node.value;
 
     case Type.IdentToken:
       return node.value;
 
     case Type.DimensionToken:
-      return `${node.value}${node.unit}`;
+      return node.value + node.unit;
 
     case Type.DelimToken:
       return node.value;
@@ -1511,13 +1511,13 @@ function serializeInternal(node: Node, level: number): string {
       return ',';
 
     case Type.URLToken:
-      return `url("${node.value}")`;
+      return 'url(' + node.value + ')';
 
     case Type.AtKeywordToken:
-      return `@${node.value}`;
+      return '@' + node.value;
 
     case Type.PercentageToken:
-      return `${node.value}%`;
+      return node.value + '%';
 
     default:
       throw new Error(`Unsupported token ${node.type}`);

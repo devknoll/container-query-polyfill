@@ -4,8 +4,8 @@
     "outDir": "dist",
     "lib": ["ES2018", "DOM", "DOM.Iterable"],
     "strict": true,
-    "target": "es2018",
-    "module": "es2022",
+    "target": "ESNext",
+    "module": "ESNext",
     "moduleResolution": "node",
     "types": [],
     "esModuleInterop": true

@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google Inc. All Rights Reserved.
+ * Copyright 2022 Google Inc. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -12,648 +12,359 @@
  */
 
 import {
-  parseStylesheet,
-  serialize,
-  tokenize,
-  AtRuleNode,
-  QualifiedRuleNode,
-  Type,
-  Node,
-  createNodeParser,
-  NumberFlag,
-  DeclarationNode,
-  parseDeclaration,
-  BlockType,
-  RuleListBlock,
-  serializeBlock,
-  DimensionToken,
-} from './utils/css.js';
-import {
   ContainerType,
   evaluateContainerCondition,
-  ExpressionNode,
   QueryContext,
-  WritingMode,
 } from './evaluate.js';
 import {
-  parseContainerNameProperty,
-  parseContainerRule,
-  parseContainerShorthand,
-  parseContainerTypeProperty,
-} from './parser.js';
-import {
-  GenericExpressionNode,
-  GenericExpressionType,
-  parseMediaCondition,
-  transformMediaConditionToTokens,
-} from './utils/parse-media-query.js';
+  CUSTOM_PROPERTY_NAME,
+  CUSTOM_PROPERTY_TYPE,
+  CUSTOM_UNIT_VARIABLE_CQB,
+  CUSTOM_UNIT_VARIABLE_CQH,
+  CUSTOM_UNIT_VARIABLE_CQI,
+  CUSTOM_UNIT_VARIABLE_CQW,
+  DATA_ATTRIBUTE_NAME,
+  PER_RUN_UID,
+} from './constants.js';
+import {ContainerQueryDescriptor, transpileStyleSheet} from './transform.js';
 
-interface ContainerQueryDescriptor {
-  names: Set<string>;
-  condition: ExpressionNode;
-  uid: string;
-  selector: string;
+const enum WritingAxis {
+  Horizontal = 0,
+  Vertical,
 }
 
-interface ContainerState {
-  update(contentRect: DOMRectReadOnly): void;
-  setParentResults(
-    results: Map<ContainerQueryDescriptor, boolean> | null
-  ): void;
+interface TreeContext {
+  writingAxis: WritingAxis | null;
+  conditions: Record<string, boolean>;
+}
+
+interface ElementInstance {
+  beforeLayout(context: TreeContext | null): void;
+  afterLayout(entry: ResizeObserverEntry): void;
   dispose(): void;
 }
 
-let CONTAINER_ID = 0;
+let QUERY_DESCRIPTORS: ReadonlyArray<ContainerQueryDescriptor> = [];
 
-const ELEMENT_TO_CONTAINER: Map<Element, ContainerState> = new Map();
-const CONTAINER_QUERIES: Set<ContainerQueryDescriptor> = new Set();
+const INSTANCE_SYMBOL: unique symbol = Symbol();
+const QUERY_CONTAINER_ELEMENTS: Set<Element> = new Set();
+const SUPPORTS_SMALL_VIEWPORT_UNITS = CSS.supports('width: 1svh');
 
-const PER_RUN_UID = generateUID();
-const CUSTOM_PROPERTY_SHORTHAND = `--cq-container-${PER_RUN_UID}`;
-const CUSTOM_PROPERTY_TYPE = `--cq-container-type-${PER_RUN_UID}`;
-const CUSTOM_PROPERTY_NAME = `--cq-container-name-${PER_RUN_UID}`;
-const CUSTOM_PROPERTY_SVH = `--cq-svh-${PER_RUN_UID}`;
-const CUSTOM_PROPERTY_SVW = `--cq-svw-${PER_RUN_UID}`;
-const DATA_ATTRIBUTE_NAME = `data-cq-${PER_RUN_UID}`;
+const documentElement = document.documentElement;
+const rootEl = document.createElement(`cq-polyfill-${PER_RUN_UID}`);
+const rootStyles = window.getComputedStyle(rootEl);
 
-const BLOCK_PREFIX = parseStylesheet(
-  Array.from(
-    tokenize(
-      `* { ${CUSTOM_PROPERTY_TYPE}: initial; ${CUSTOM_PROPERTY_NAME}: initial; }`
-    )
-  )
-).value;
+rootEl.style.cssText =
+  'position: fixed; top: 0; left: 0; right: 0; bottom: 0; visibility: hidden; font-size: 1rem; transition: font-size 1e-8ms;';
+documentElement.appendChild(rootEl);
 
-interface ComputedValue<T> {
-  (): T;
-}
-
-function atom<T>(fn: () => T): ComputedValue<T> {
-  return fn;
-}
-
-interface MemoizedValue<T> {
-  dependencies: Array<[ComputedValue<unknown>, unknown]>;
-  value: T;
-}
-
-function areDepsDirty<T>(memoizedValue: MemoizedValue<T>) {
-  for (const dependency of memoizedValue.dependencies) {
-    if (dependency[0]() !== dependency[1]) {
-      return true;
-    }
+function getOrCreateInstance(node: Node): ElementInstance | null {
+  if (!(node instanceof HTMLElement)) {
+    return null;
   }
 
-  return false;
-}
-
-function derive<T>(
-  fn: (read: <U>(value: ComputedValue<U>) => U) => T
-): ComputedValue<T> {
-  let memoizedValue: MemoizedValue<T> | null = null;
-
-  return function getDerivedValue() {
-    if (!memoizedValue || areDepsDirty(memoizedValue)) {
-      const dependencies: Array<[ComputedValue<unknown>, unknown]> = [];
-      const value = fn(value => {
-        const res = value();
-        dependencies.push([value, res]);
-        return res;
-      });
-
-      memoizedValue = {dependencies, value};
-    }
-
-    return memoizedValue.value;
-  };
-}
-
-function generateUID(): string {
-  return Array.from({length: 4}, () =>
-    Math.floor(Math.random() * 256).toString(16)
-  ).join('');
-}
-
-function parseWritingMode(value?: string): WritingMode {
-  if (!value || value.length === 0) {
-    return WritingMode.Horizontal;
-  }
-  const lowerValue = value.toLowerCase();
-  if (lowerValue.startsWith('horizontal')) {
-    return WritingMode.Horizontal;
-  } else if (
-    lowerValue.startsWith('vertical') ||
-    lowerValue.startsWith('sideways')
-  ) {
-    return WritingMode.Vertical;
-  } else {
-    throw new Error('Unsupported writing mode ' + value);
-  }
-}
-
-function findParentContainerElement(el: Element | null): Element | undefined {
-  if (el) {
-    if (ELEMENT_TO_CONTAINER.has(el)) {
-      return el;
-    }
-    return findParentContainerElement(el.parentElement);
-  }
-}
-
-export function preinit() {
-  // ...
-}
-
-export function init() {
-  // ...
-}
-
-export function transpileStyleSheet(sheetSrc: string, srcUrl?: string): string {
-  function transformStylesheet(node: RuleListBlock): RuleListBlock {
-    return {
-      ...node,
-      value: node.value.map(transformRule),
-    };
-  }
-
-  function transformRule(
-    node: AtRuleNode | QualifiedRuleNode
-  ): AtRuleNode | QualifiedRuleNode {
-    switch (node.type) {
-      case Type.AtRuleNode:
-        return transformAtRule(node);
-
-      case Type.QualifiedRuleNode:
-        return transformQualifiedRule(node);
-
-      default:
-        return node;
-    }
-  }
-
-  function isEndOfSelector(n1: Node): boolean {
-    return n1.type === Type.EOFToken || n1.type === Type.CommaToken;
-  }
-
-  function isPseudoElementStart(n1: Node, n2: Node): boolean {
-    if (isEndOfSelector(n1)) {
-      return true;
-    } else if (n1.type === Type.ColonToken) {
-      if (n2.type === Type.ColonToken) {
-        return true;
-      } else if (n2.type === Type.IdentToken) {
-        // https://www.w3.org/TR/selectors-4/#single-colon-pseudos
-        switch (n2.value.toLowerCase()) {
-          case 'before':
-          case 'after':
-          case 'first-line':
-          case 'first-letter':
-            return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  function trimTrailingWhitespace(nodes: Node[]): Node[] {
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      if (nodes[i].type !== Type.WhitespaceToken) {
-        return nodes.slice(0, i + 1);
-      }
-    }
-    return nodes;
-  }
-
-  function transformSelector(
-    nodes: Node[],
-    containerUID: string
-  ): [Node[], Node[]] {
-    const parser = createNodeParser(nodes);
-    const elementSelector: Node[] = [];
-    const styleSelector: Node[] = [];
-
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      if (parser.at(1).type === Type.EOFToken) {
-        return [elementSelector, styleSelector];
-      }
-
-      const selectorStartIndex = Math.max(0, parser.index);
-
-      // Consume non-pseudo part
-      while (!isPseudoElementStart(parser.at(1), parser.at(2))) {
-        parser.consume(1);
-      }
-
-      const pseudoStartIndex = parser.index + 1;
-      const rawTargetSelector = nodes.slice(
-        selectorStartIndex,
-        pseudoStartIndex
-      );
-      const targetSelector =
-        rawTargetSelector.length > 0
-          ? trimTrailingWhitespace(rawTargetSelector)
-          : [
-              {
-                type: Type.DelimToken,
-                value: '*',
-              } as Node,
-            ];
-
-      // Consume pseudo part
-      while (!isEndOfSelector(parser.at(1))) {
-        parser.consume(1);
-      }
-
-      elementSelector.push(...targetSelector);
-      styleSelector.push(...targetSelector);
-      styleSelector.push(
-        {type: Type.ColonToken},
-        {
-          type: Type.FunctionNode,
-          name: 'where',
-          value: [
-            {
-              type: Type.BlockNode,
-              source: {type: Type.LeftSquareBracketToken},
-              value: {
-                type: BlockType.SimpleBlock,
-                value: [
-                  {type: Type.IdentToken, value: DATA_ATTRIBUTE_NAME},
-                  {type: Type.DelimToken, value: '~'},
-                  {type: Type.DelimToken, value: '='},
-                  {type: Type.StringToken, value: containerUID},
-                ],
-              },
-            },
-          ],
-        }
-      );
-      styleSelector.push(
-        ...nodes.slice(pseudoStartIndex, Math.max(0, parser.index + 1))
-      );
-
-      // Consume the end of the selector
-      parser.consume(1);
-    }
-  }
-
-  function transformMediaAtRule(node: AtRuleNode): AtRuleNode {
-    return {
-      ...node,
-      value: node.value
-        ? {
-            ...node.value,
-            value: transformStylesheet(parseStylesheet(node.value.value.value)),
-          }
-        : null,
-    };
-  }
-
-  function transformSupportsExpression(
-    node: GenericExpressionNode
-  ): GenericExpressionNode {
-    if (node.type === GenericExpressionType.Negate) {
-      return {
-        ...node,
-        value: transformSupportsExpression(node.value),
-      };
-    } else if (
-      node.type === GenericExpressionType.Conjunction ||
-      node.type === GenericExpressionType.Disjunction
-    ) {
-      return {
-        ...node,
-        left: transformSupportsExpression(node.left),
-        right: transformSupportsExpression(node.right),
-      };
-    } else if (
-      node.type === GenericExpressionType.Literal &&
-      node.value.type === Type.BlockNode
-    ) {
-      const declaration = parseDeclaration(node.value.value.value);
-      if (declaration) {
-        return {
-          ...node,
-          value: {
-            ...node.value,
-            value: {
-              type: BlockType.SimpleBlock,
-              value: [transformPropertyDeclaration(declaration)],
-            },
-          },
-        };
-      }
-    }
-    return node;
-  }
-
-  function transformSupportsAtRule(node: AtRuleNode): AtRuleNode {
-    let condition = parseMediaCondition(node.prelude);
-    condition = condition ? transformSupportsExpression(condition) : null;
-
-    return {
-      ...node,
-      prelude: condition
-        ? transformMediaConditionToTokens(condition)
-        : node.prelude,
-      value: node.value
-        ? {
-            ...node.value,
-            value: transformStylesheet(parseStylesheet(node.value.value.value)),
-          }
-        : node.value,
-    };
-  }
-
-  function transformContainerAtRule(node: AtRuleNode): AtRuleNode {
-    if (node.value) {
-      const containerRule = parseContainerRule(node.prelude);
-      if (containerRule) {
-        const uid = `c${CONTAINER_ID++}`;
-        const originalRules = transformStylesheet(
-          parseStylesheet(node.value.value.value)
-        ).value;
-        const transformedRules: Array<QualifiedRuleNode> = [];
-        const elementSelectors = new Set<string>();
-
-        for (const rule of originalRules) {
-          if (rule.type !== Type.QualifiedRuleNode) {
-            continue;
-          }
-
-          const [elementSelector, styleSelector] = transformSelector(
-            rule.prelude,
-            uid
+  let instance = getElementInstance(node);
+  if (!instance) {
+    if (node === rootEl) {
+      instance = {
+        afterLayout(entry) {
+          documentElement.style.setProperty(
+            CUSTOM_UNIT_VARIABLE_CQW,
+            SUPPORTS_SMALL_VIEWPORT_UNITS
+              ? '1svw'
+              : entry.contentRect.width + 'px'
           );
+          documentElement.style.setProperty(
+            CUSTOM_UNIT_VARIABLE_CQH,
+            SUPPORTS_SMALL_VIEWPORT_UNITS
+              ? '1svh'
+              : entry.contentRect.height + 'px'
+          );
+        },
 
-          transformedRules.push({
-            ...rule,
-            prelude: styleSelector,
-          });
-          elementSelectors.add(elementSelector.map(serialize).join(''));
+        beforeLayout() {
+          scheduleUpdate(node);
+        },
+
+        dispose() {
+          disposeImpl(node);
+        },
+      };
+    } else if (node instanceof HTMLHeadElement) {
+      instance = {
+        afterLayout() {
+          // Noop
+        },
+
+        beforeLayout(context) {
+          // <head> won't usually be rendered, so we schedule its
+          // children here instead.
+          scheduleChildrenImpl(node, context);
+        },
+
+        dispose() {
+          disposeImpl(node);
+        },
+      };
+    } else if (node instanceof HTMLLinkElement) {
+      if (node.rel === 'stylesheet') {
+        const srcUrl = new URL(node.href, document.baseURI);
+        if (srcUrl.origin === location.origin) {
+          fetch(srcUrl.toString())
+            .then(r => r.text())
+            .then(src => {
+              const res = transpileStyleSheet(src, srcUrl.toString());
+              QUERY_DESCRIPTORS = [...QUERY_DESCRIPTORS, ...res[1]];
+              const blob = new Blob([res[0]], {type: 'text/css'});
+
+              const img = new Image();
+              img.onload = img.onerror = () => {
+                scheduleUpdate(documentElement);
+              };
+              img.src = node.href = URL.createObjectURL(blob);
+            });
         }
-
-        CONTAINER_QUERIES.add({
-          names: new Set(containerRule.names),
-          condition: containerRule.condition,
-          selector: Array.from(elementSelectors).join(', '),
-          uid,
-        });
-
-        return {
-          type: Type.AtRuleNode,
-          name: 'media',
-          prelude: [
-            {
-              type: Type.IdentToken,
-              value: 'all',
-            },
-          ],
-          value: {
-            ...node.value,
-            value: {
-              type: BlockType.RuleList,
-              value: [...BLOCK_PREFIX, ...transformedRules],
-            },
-          },
-        };
       }
-    }
 
-    return node;
-  }
+      instance = {
+        beforeLayout() {
+          // NOOP
+        },
 
-  function transformAtRule(node: AtRuleNode): AtRuleNode {
-    switch (node.name.toLocaleLowerCase()) {
-      case 'media':
-        return transformMediaAtRule(node);
+        afterLayout() {
+          // NOOP
+        },
 
-      case 'supports':
-        return transformSupportsAtRule(node);
-
-      case 'container':
-        return transformContainerAtRule(node);
-
-      default:
-        return node;
-    }
-  }
-
-  function transformContainerDimensions(node: DimensionToken): Node {
-    switch (node.unit) {
-      case 'cqw':
-      case 'cqh':
-      case 'cqi':
-      case 'cqb':
-        return {
-          type: Type.FunctionNode,
-          name: 'calc',
-          value: [],
-        };
-
-      case 'cqmin':
-        return {
-          type: Type.FunctionNode,
-          name: 'min',
-          value: [],
-        };
-
-      case 'cqmax':
-        return {
-          type: Type.FunctionNode,
-          name: 'max',
-          value: [],
-        };
-
-      default:
-        return node;
-    }
-  }
-
-  function transformContainerUnits(nodes: ReadonlyArray<Node>): Node[] {
-    return nodes.map(node => {
-      switch (node.type) {
-        case Type.DimensionToken:
-          return transformContainerDimensions(node);
-
-        case Type.FunctionNode:
-          return {
-            ...node,
-            value: transformContainerUnits(node.value),
-          };
-
-        default:
-          return node;
+        dispose() {
+          disposeImpl(node);
+        },
+      };
+    } else if (node instanceof HTMLStyleElement) {
+      const originalSrc = node.innerHTML;
+      if (originalSrc.length > 0) {
+        const res = transpileStyleSheet(originalSrc);
+        QUERY_DESCRIPTORS = [...QUERY_DESCRIPTORS, ...res[1]];
+        node.innerHTML = res[0];
+        scheduleUpdate(documentElement);
       }
+
+      instance = {
+        beforeLayout() {
+          // NOOP
+        },
+
+        afterLayout() {
+          // NOOP
+        },
+
+        dispose() {
+          disposeImpl(node);
+        },
+      };
+    } else {
+      const styles = window.getComputedStyle(node);
+      const style = node.style;
+
+      let parentContext: TreeContext | null = null;
+
+      instance = {
+        beforeLayout(context) {
+          parentContext = context;
+          const attributes: string[] = [];
+
+          if (parentContext) {
+            const conditions = parentContext.conditions;
+            for (const query of QUERY_DESCRIPTORS) {
+              const uid = query.uid;
+              const result = conditions[uid];
+              if (result === true && node.matches(query.selector)) {
+                attributes.push(uid);
+              }
+            }
+          }
+
+          if (attributes.length === 0) {
+            node.removeAttribute(DATA_ATTRIBUTE_NAME);
+          } else {
+            node.setAttribute(DATA_ATTRIBUTE_NAME, attributes.join(' '));
+          }
+
+          scheduleUpdate(node);
+        },
+
+        afterLayout(entry) {
+          const treeContext = computeLocalTreeContext(
+            styles,
+            parentContext,
+            entry,
+            QUERY_DESCRIPTORS
+          );
+          const writingAxis = treeContext.context.writingAxis;
+          if (writingAxis !== treeContext.parentWritingAxis) {
+            style.setProperty(
+              CUSTOM_UNIT_VARIABLE_CQI,
+              `var(${
+                writingAxis === WritingAxis.Horizontal
+                  ? CUSTOM_UNIT_VARIABLE_CQW
+                  : CUSTOM_UNIT_VARIABLE_CQH
+              })`
+            );
+            style.setProperty(
+              CUSTOM_UNIT_VARIABLE_CQB,
+              `var(${
+                writingAxis === WritingAxis.Vertical
+                  ? CUSTOM_UNIT_VARIABLE_CQW
+                  : CUSTOM_UNIT_VARIABLE_CQH
+              })`
+            );
+          } else {
+            style.removeProperty(CUSTOM_UNIT_VARIABLE_CQI);
+            style.removeProperty(CUSTOM_UNIT_VARIABLE_CQB);
+          }
+
+          const queryContext = treeContext.queryContext;
+          if (queryContext) {
+            QUERY_CONTAINER_ELEMENTS.add(node);
+            const sizeFeatures = queryContext.sizeFeatures;
+
+            if (sizeFeatures.width != null) {
+              style.setProperty(
+                CUSTOM_UNIT_VARIABLE_CQW,
+                sizeFeatures.width + 'px'
+              );
+            }
+            if (sizeFeatures.height != null) {
+              style.setProperty(
+                CUSTOM_UNIT_VARIABLE_CQH,
+                sizeFeatures.height + 'px'
+              );
+            }
+          } else {
+            QUERY_CONTAINER_ELEMENTS.delete(node);
+            style.removeProperty(CUSTOM_UNIT_VARIABLE_CQW);
+            style.removeProperty(CUSTOM_UNIT_VARIABLE_CQH);
+          }
+
+          // We may have new children, or their order may have changed, so we always
+          // need to update them.
+          scheduleChildrenImpl(node, treeContext.context);
+        },
+
+        dispose() {
+          QUERY_CONTAINER_ELEMENTS.delete(node);
+          RO.unobserve(node);
+          disposeImpl(node);
+        },
+      };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (node as any)[INSTANCE_SYMBOL] = instance;
+  }
+
+  return instance;
+}
+
+function getElementInstance(node: Node): ElementInstance | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (node as any)[INSTANCE_SYMBOL] || null;
+}
+
+function disposeImpl(node: HTMLElement) {
+  for (const child of node.children) {
+    const childInstance = getElementInstance(child);
+    if (childInstance) {
+      childInstance.dispose();
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (node as any)[INSTANCE_SYMBOL];
+}
+
+function scheduleChildrenImpl(node: HTMLElement, context: TreeContext | null) {
+  for (const child of node.children) {
+    const childInstance = getOrCreateInstance(child);
+    if (childInstance) {
+      childInstance.beforeLayout(context);
+    }
+  }
+}
+
+function scheduleUpdate(el: Element) {
+  /**
+   * The ResizeObserver spec guarantees that an entry will be added
+   * when an element starts being observed. We use this guarantee to
+   * "schedule" an update for an element.
+   *
+   * This will ensure that:
+   *
+   *   1.) We will get a ResizeObserverEntry for el, even if it was
+   *       not actually resized.
+   *
+   *   2.) We can perform our updates after all of our parents,
+   *       according to the ResizeObserver processing model.
+   */
+  RO.unobserve(el);
+  RO.observe(el);
+}
+
+let hasLayoutStarted = false;
+const RO = new ResizeObserver(entries => {
+  if (!hasLayoutStarted) {
+    hasLayoutStarted = true;
+    requestAnimationFrame(() => {
+      hasLayoutStarted = false;
     });
   }
 
-  function transformPropertyDeclaration(
-    node: DeclarationNode
-  ): DeclarationNode {
-    if (node.name === 'container') {
-      const result = parseContainerShorthand(node.value);
-      return result ? {...node, name: CUSTOM_PROPERTY_SHORTHAND} : node;
-    } else if (node.name === 'container-name') {
-      const result = parseContainerNameProperty(node.value);
-      return result ? {...node, name: CUSTOM_PROPERTY_NAME} : node;
-    } else if (node.name === 'container-type') {
-      const result = parseContainerTypeProperty(node.value);
-      return result ? {...node, name: CUSTOM_PROPERTY_TYPE} : node;
+  for (const entry of entries) {
+    const instance = getOrCreateInstance(entry.target);
+    if (instance) {
+      instance.afterLayout(entry);
     }
-    return {
-      ...node,
-      value: transformContainerUnits(node.value),
-    };
   }
+});
 
-  function transformQualifiedRule(node: QualifiedRuleNode): QualifiedRuleNode {
-    const declarations: Array<AtRuleNode | DeclarationNode> = [];
-    let containerNames: string[] | null = null;
-    let containerType: ContainerType | null = null;
+const MO = new MutationObserver(entries => {
+  for (const entry of entries) {
+    if (entry.type === 'attributes' && hasLayoutStarted) {
+      /**
+       * Once layout has started, any attribute changes are either:
+       *
+       *   a.) generated by the polyfill itself (most likely)
+       *   b.) too late to be applied
+       *
+       * So we don't schedule updates here, as that could cause us
+       * to either do unnecessary work in the best case, or generate
+       * resize loop errors in the worst case.
+       */
+      continue;
+    }
 
-    for (const declaration of node.value.value.value) {
-      switch (declaration.type) {
-        case Type.AtRuleNode:
-          {
-            const newAtRule = transformAtRule(declaration);
-            if (newAtRule) {
-              declarations.push(newAtRule);
-            }
-          }
-          break;
-
-        case Type.DeclarationNode:
-          {
-            const newDeclaration = transformPropertyDeclaration(declaration);
-            switch (newDeclaration.name) {
-              case CUSTOM_PROPERTY_SHORTHAND: {
-                const result = parseContainerShorthand(declaration.value);
-                if (result != null) {
-                  containerNames = result[0];
-                  containerType = result[1];
-                }
-                break;
-              }
-
-              case CUSTOM_PROPERTY_NAME: {
-                const result = parseContainerNameProperty(declaration.value);
-                if (result != null) {
-                  containerNames = result;
-                }
-                break;
-              }
-
-              case CUSTOM_PROPERTY_TYPE: {
-                const result = parseContainerTypeProperty(declaration.value);
-                if (result != null) {
-                  containerType = result;
-                }
-                break;
-              }
-
-              default:
-                declarations.push(newDeclaration);
-                break;
-            }
-          }
-          break;
+    for (const node of entry.removedNodes) {
+      // Note: We don't want to recurse into the nodes here. Instead,
+      // we'll do that as part of the update, if necessary.
+      const instance = getElementInstance(node);
+      if (instance) {
+        instance.dispose();
       }
     }
 
-    if (containerNames) {
-      const containerNameNodes: Node[] = [];
-      for (let i = 0; i < containerNames.length; i++) {
-        containerNameNodes.push({
-          type: Type.IdentToken,
-          value: containerNames[i],
-        });
-
-        if (i + 1 < containerNames.length) {
-          containerNameNodes.push({type: Type.WhitespaceToken});
-        }
-      }
-
-      declarations.push({
-        type: Type.DeclarationNode,
-        name: CUSTOM_PROPERTY_NAME,
-        value: containerNameNodes,
-        important: false,
-      });
-    }
-
-    if (containerType !== null) {
-      declarations.push(
-        {
-          type: Type.DeclarationNode,
-          name: 'contain',
-          value: [
-            {
-              type: Type.IdentToken,
-              value: 'size',
-            },
-            {type: Type.WhitespaceToken},
-            {
-              type: Type.IdentToken,
-              value: 'layout',
-            },
-            {type: Type.WhitespaceToken},
-            {
-              type: Type.IdentToken,
-              value: 'style',
-            },
-          ],
-          important: false,
-        },
-        {
-          type: Type.DeclarationNode,
-          name: CUSTOM_PROPERTY_TYPE,
-          value: [
-            {
-              type: Type.NumberToken,
-              value: `${containerType}`,
-              flag: NumberFlag.INTEGER,
-            },
-          ],
-          important: false,
-        }
-      );
-    }
-
-    return {
-      ...node,
-      value: {
-        ...node.value,
-        value: {
-          type: BlockType.StyleBlock,
-          value: declarations,
-        },
-      },
-    };
-  }
-
-  const tokens = Array.from(tokenize(sheetSrc));
-  if (srcUrl) {
-    // Ensure any URLs are absolute
-    for (let i = 0; i < tokens.length; i++) {
-      const token = tokens[i];
-      if (token.type === Type.URLToken) {
-        token.value = new URL(token.value, srcUrl).toString();
-      } else if (
-        token.type === Type.FunctionToken &&
-        token.value.toLowerCase() === 'url'
-      ) {
-        const nextToken = i + 1 < tokens.length ? tokens[i + 1] : null;
-        if (nextToken && nextToken.type === Type.StringToken) {
-          nextToken.value = new URL(nextToken.value, srcUrl).toString();
-        }
-      }
+    // Note: We don't want to recurse into the nodes here. Instead,
+    // we'll do that as part of the update, if necessary.
+    if (entry.target instanceof Element) {
+      scheduleUpdate(entry.target);
     }
   }
-
-  return serializeBlock(transformStylesheet(parseStylesheet(tokens, true)));
-}
+});
+MO.observe(documentElement, {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeOldValue: true,
+});
+scheduleUpdate(documentElement);
 
 function hasAllQueryNames(names: Set<string>, query: ContainerQueryDescriptor) {
   for (const name of query.names) {
@@ -664,264 +375,111 @@ function hasAllQueryNames(names: Set<string>, query: ContainerQueryDescriptor) {
   return true;
 }
 
-const documentElement = document.documentElement;
-const rootEl = document.createElement(`cq-polyfill-${PER_RUN_UID}`);
-const rootStyles = window.getComputedStyle(rootEl);
-
-rootEl.style.cssText =
-  'position: absolute; top: 0; left: 0; right: 0; bottom: 0; visibility: hidden; font-size: 1rem; transition: font-size 1e-8ms;';
-documentElement.appendChild(rootEl);
-
-// We use a separate ResizeObserver for tracking the viewport via
-// rootEl, so we're not littering the code with checks to prevent
-// it from being unobserved.
-const viewportResizeObserver = new ResizeObserver(() => {
-  documentElement.style.setProperty(
-    CUSTOM_PROPERTY_SVW,
-    rootEl.clientWidth + 'px'
-  );
-  documentElement.style.setProperty(
-    CUSTOM_PROPERTY_SVH,
-    rootEl.clientHeight + 'px'
-  );
-});
-viewportResizeObserver.observe(rootEl);
-
-const rawRootFontSize = atom(() => rootStyles.fontSize);
-const rootFontSize = derive(read => parseInt(read(rawRootFontSize)));
-
-const resizeObserver = new ResizeObserver(entries => {
-  for (const entry of entries) {
-    const container = maybeGetOrCreateContainer(entry.target);
-    if (container) {
-      container.update(entry.contentRect);
-    }
-  }
-});
-resizeObserver.observe(rootEl);
-
-function scheduleContainerUpdate(el: Element) {
-  // Schedule the container for an update.
-  resizeObserver.unobserve(el);
-  resizeObserver.observe(el);
+function computeDimension(dimension: string) {
+  return parseFloat(dimension);
 }
 
-function maybeGetOrCreateContainer(el: Element) {
-  let container = ELEMENT_TO_CONTAINER.get(el);
-  if (!container) {
-    const styles = window.getComputedStyle(el);
-    const rawContainerType = atom(() =>
-      styles.getPropertyValue(CUSTOM_PROPERTY_TYPE)
-    );
+function computeContainerType(containerType: string) {
+  return containerType.length === 0
+    ? ContainerType.None
+    : (parseInt(containerType) as ContainerType);
+}
 
-    if (rawContainerType().length === 0) {
-      resizeObserver.unobserve(el);
+function computeContainerNames(containerNames: string) {
+  return new Set(containerNames.length === 0 ? [] : containerNames.split(' '));
+}
 
-      forEachElement(el, function updateChildren(childEl) {
-        if (el !== childEl && childEl instanceof Element) {
-          const childContainer = maybeGetOrCreateContainer(childEl);
-          if (childContainer) {
-            scheduleContainerUpdate(childEl);
-            return false;
-          }
-        }
-        return true;
-      });
+function computeWritingAxis(writingMode: string) {
+  switch (writingMode) {
+    case 'vertical-lr':
+    case 'vertical-rl':
+    case 'sideways-rl':
+    case 'sideways-lr':
+    case 'tb':
+    case 'tb-lr':
+    case 'tb-rl':
+      return WritingAxis.Vertical;
 
-      return null;
-    }
+    default:
+      return WritingAxis.Horizontal;
+  }
+}
 
-    let rawParentResults: Map<ContainerQueryDescriptor, boolean> | null = null;
-    let contentRect: DOMRectReadOnly;
+function computeSizeFeatures(
+  entry: ResizeObserverEntry,
+  containerType: ContainerType,
+  writingAxis: WritingAxis
+) {
+  const contentRect = entry.contentRect;
+  const sizeFeatures = {
+    width:
+      containerType === ContainerType.InlineSize &&
+      writingAxis === WritingAxis.Vertical
+        ? undefined
+        : contentRect.width,
+    height:
+      containerType === ContainerType.InlineSize &&
+      writingAxis === WritingAxis.Horizontal
+        ? undefined
+        : contentRect.height,
+    inlineSize:
+      writingAxis === WritingAxis.Horizontal
+        ? contentRect.width
+        : contentRect.height,
+    blockSize:
+      containerType === ContainerType.InlineSize
+        ? undefined
+        : writingAxis === WritingAxis.Vertical
+        ? contentRect.width
+        : contentRect.height,
+  };
+  return sizeFeatures;
+}
 
-    const rawContainerNames = atom(() =>
-      styles.getPropertyValue(CUSTOM_PROPERTY_NAME)
-    );
-    const rawFontSize = atom(() => styles.getPropertyValue('font-size'));
-    const rawWritingMode = atom(() => styles.getPropertyValue('writing-mode'));
+function computeLocalTreeContext(
+  styles: CSSStyleDeclaration,
+  context: TreeContext | null,
+  entry: ResizeObserverEntry,
+  queryDescriptors: ReadonlyArray<ContainerQueryDescriptor>
+) {
+  const writingAxis = computeWritingAxis(
+    styles.getPropertyValue('writing-mode')
+  );
+  const containerType = computeContainerType(
+    styles.getPropertyValue(CUSTOM_PROPERTY_TYPE)
+  );
 
-    const containerType = derive(read => {
-      switch (read(rawContainerType)) {
-        case '1':
-          return ContainerType.Size;
-        case '2':
-          return ContainerType.InlineSize;
-        default:
-          return ContainerType.None;
-      }
-    });
-    const containerNames = derive(read => {
-      const names = read(rawContainerNames);
-      return new Set(names.length === 0 ? [] : names.split(' '));
-    });
-    const fontSize = derive(read => parseInt(read(rawFontSize)));
-    const writingMode = derive(read => parseWritingMode(read(rawWritingMode)));
+  let conditions: Record<string, boolean> = context ? context.conditions : {};
+  let queryContext: QueryContext | null = null;
 
-    const width = atom(() => contentRect.width);
-    const height = atom(() => contentRect.height);
-    const parentResults = atom(() => rawParentResults);
-
-    const context: ComputedValue<QueryContext> = derive(read => ({
-      type: read(containerType),
-      fontSize: read(fontSize),
-      rootFontSize: read(rootFontSize),
-      writingMode: read(writingMode),
-      width: read(width),
-      height: read(height),
-    }));
-
-    const containerQueries = atom(() => CONTAINER_QUERIES.values());
-    const getQueryResults = derive(read => {
-      const type = read(containerType);
-      if (type === ContainerType.None) {
-        return null;
-      }
-
-      const res: Map<ContainerQueryDescriptor, boolean> = new Map(
-        read(parentResults)
-      );
-      const ctx = read(context);
-      const names = read(containerNames);
-
-      for (const query of read(containerQueries)) {
-        if (!hasAllQueryNames(names, query)) {
-          continue;
-        }
-        res.set(query, evaluateContainerCondition(query.condition, ctx));
-      }
-
-      return res;
-    });
-
-    container = {
-      update(newContentRect) {
-        contentRect = newContentRect;
-        const localResults = getQueryResults();
-        const results = localResults ? localResults : rawParentResults;
-        const matches: string[] = [];
-
-        forEachElement(el, function updateContainerElements(childEl) {
-          if (childEl instanceof Element) {
-            if (results) {
-              for (const [query, result] of results) {
-                if (result && childEl.matches(query.selector)) {
-                  matches.push(query.uid);
-                }
-              }
-            }
-
-            if (matches.length > 0) {
-              childEl.setAttribute(DATA_ATTRIBUTE_NAME, matches.join(' '));
-              matches.length = 0;
-            } else {
-              childEl.removeAttribute(DATA_ATTRIBUTE_NAME);
-            }
-
-            if (childEl !== el) {
-              const childContainer = maybeGetOrCreateContainer(childEl);
-              if (childContainer) {
-                childContainer.setParentResults(results);
-                scheduleContainerUpdate(childEl);
-                return false;
-              }
-            }
-          }
-
-          return true;
-        });
-
-        if (!results) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          container!.dispose();
-        }
-      },
-      setParentResults(results) {
-        rawParentResults = results;
-      },
-      dispose() {
-        rawParentResults = null;
-        resizeObserver.unobserve(el);
-        ELEMENT_TO_CONTAINER.delete(el);
-      },
+  if (containerType) {
+    queryContext = {
+      fontSize: computeDimension(styles.getPropertyValue('font-size')),
+      rootFontSize: computeDimension(rootStyles.getPropertyValue('font-size')),
+      sizeFeatures: computeSizeFeatures(entry, containerType, writingAxis),
     };
 
-    ELEMENT_TO_CONTAINER.set(el, container);
-  }
-  return container;
-}
+    const containerNames = computeContainerNames(
+      styles.getPropertyValue(CUSTOM_PROPERTY_NAME)
+    );
+    conditions = {...conditions};
 
-['transitionstart', 'transitionend', 'animationstart', 'animationend'].forEach(
-  name => {
-    window.addEventListener(name, e => {
-      if (e.target === rootEl) {
-        for (const el of ELEMENT_TO_CONTAINER.keys()) {
-          scheduleContainerUpdate(el);
-        }
-      } else if (e.target instanceof HTMLElement) {
-        scheduleContainerUpdate(e.target);
+    for (const query of queryDescriptors) {
+      if (hasAllQueryNames(containerNames, query)) {
+        conditions[query.uid] = evaluateContainerCondition(
+          query.condition,
+          queryContext
+        );
       }
-    });
-  }
-);
-
-export function findNewContainers() {
-  scheduleContainerUpdate(documentElement);
-}
-
-const mutationObserver = new MutationObserver(entries => {
-  for (const entry of entries) {
-    if (
-      entry.attributeName === DATA_ATTRIBUTE_NAME ||
-      entry.target === rootEl
-    ) {
-      continue;
-    } else if (
-      entry.target instanceof HTMLLinkElement ||
-      entry.target instanceof HTMLStyleElement
-    ) {
-      scheduleContainerUpdate(documentElement);
-      continue;
-    }
-
-    for (const node of entry.removedNodes) {
-      forEachElement(node, el => {
-        if (el instanceof HTMLElement) {
-          el.removeAttribute(DATA_ATTRIBUTE_NAME);
-          const container = ELEMENT_TO_CONTAINER.get(el);
-          if (container) {
-            container.dispose();
-          }
-        }
-        return true;
-      });
-    }
-
-    /**
-     * Note: We don't want to traverse through added/updated nodes here,
-     * because we're going to do that in the ResizeObserver.
-     */
-    if (entry.target instanceof Element) {
-      const containerElement = findParentContainerElement(entry.target);
-      scheduleContainerUpdate(
-        containerElement ? containerElement : entry.target
-      );
     }
   }
-});
-mutationObserver.observe(document, {
-  childList: true,
-  subtree: true,
-  attributes: true,
-});
 
-function forEachElement(
-  el: globalThis.Node,
-  callback: (el: globalThis.Node) => boolean
-) {
-  callback(el);
-  for (const childEl of el.childNodes) {
-    if (callback(childEl)) {
-      forEachElement(childEl, callback);
-    }
-  }
+  return {
+    context: {
+      conditions,
+      writingAxis,
+    },
+    queryContext,
+    parentWritingAxis: context ? context.writingAxis : null,
+  };
 }

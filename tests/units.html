@@ -1,25 +1,22 @@
 <!DOCTYPE html>
+<script src="./../dist/src/cqfill.iife.min.js"></script>
 <style>
   div {
     outline: 1px solid red;
-    resize: both;
-    overflow: auto;
-    container-type: size;
+    /* container-type: size; */
     height: 100px;
+    width: 1cqh;
   }
 
   h1 {
     font-size: 10px;
-    width: calc(3 * 1cqw);
-    width: 1cqw;
   }
 </style>
-<div style="width: 100px">
+<div>
   <h1>Ohai</h1>
 </div>
 <script type="module">
   import {doubleRaf, testSuite, assert} from './test-utils.js';
-  import {transpileStyleSheet} from '/../dist/src/cqfill.js';
 
   testSuite('Manual transpiling', async () => {
     {

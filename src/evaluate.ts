@@ -113,49 +113,38 @@ export const enum SizeFeature {
   Orientation,
 }
 
-export const enum WritingMode {
-  Horizontal = 1,
-  Vertical,
-}
-
 export const enum ContainerType {
   None = 0,
   Size,
   InlineSize,
 }
 
+export interface SizeFeatures {
+  width?: number;
+  height?: number;
+  blockSize?: number;
+  inlineSize: number;
+}
+
 export interface QueryContext {
-  type: ContainerType;
-  width: number;
-  height: number;
   fontSize: number;
   rootFontSize: number;
-  writingMode: WritingMode;
+  sizeFeatures: SizeFeatures;
 }
 
 function evaluateFeatureValue(
   feature: SizeFeature,
   context: QueryContext
 ): Value {
-  const inlineSize =
-    context.writingMode === WritingMode.Horizontal
-      ? context.width
-      : context.height;
-  const blockSize =
-    context.type === ContainerType.Size
-      ? context.writingMode === WritingMode.Horizontal
-        ? context.height
-        : context.width
-      : null;
-
-  const width =
-    context.writingMode === WritingMode.Horizontal ? inlineSize : blockSize;
-  const height =
-    context.writingMode === WritingMode.Horizontal ? blockSize : inlineSize;
+  const sizeFeatures = context.sizeFeatures;
+  const width = sizeFeatures.width;
+  const height = sizeFeatures.height;
+  const inlineSize = sizeFeatures.inlineSize;
+  const blockSize = sizeFeatures.blockSize;
 
   switch (feature) {
     case SizeFeature.Width:
-      return width !== null
+      return width != null
         ? {type: ValueType.Dimension, value: width, unit: 'px'}
         : {type: ValueType.Unknown};
 
@@ -163,17 +152,17 @@ function evaluateFeatureValue(
       return {type: ValueType.Dimension, value: inlineSize, unit: 'px'};
 
     case SizeFeature.Height:
-      return height !== null
+      return height != null
         ? {type: ValueType.Dimension, value: height, unit: 'px'}
         : {type: ValueType.Unknown};
 
     case SizeFeature.BlockSize:
-      return blockSize !== null
+      return blockSize != null
         ? {type: ValueType.Dimension, value: blockSize, unit: 'px'}
         : {type: ValueType.Unknown};
 
     case SizeFeature.AspectRatio:
-      return blockSize !== null
+      return blockSize != null
         ? {
             type: ValueType.Number,
             value: inlineSize / blockSize,
@@ -181,7 +170,7 @@ function evaluateFeatureValue(
         : {type: ValueType.Unknown};
 
     case SizeFeature.Orientation:
-      return blockSize !== null
+      return blockSize != null
         ? {
             type: ValueType.Orientation,
             value: blockSize >= inlineSize ? 'portrait' : 'landscape',
@@ -205,7 +194,6 @@ function evaluateExpressionToValue(
       return evaluateFeatureValue(node.feature, context);
 
     case ExpressionType.Value:
-      // TODO: Correctly evaluate e.g. Dimension values
       return node.value;
   }
 }
