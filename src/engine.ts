@@ -240,6 +240,7 @@ function getOrCreateInstance(node: Node): ElementInstance | null {
               );
             }
           } else {
+            RO.unobserve(node);
             QUERY_CONTAINER_ELEMENTS.delete(node);
             style.removeProperty(CUSTOM_UNIT_VARIABLE_CQW);
             style.removeProperty(CUSTOM_UNIT_VARIABLE_CQH);
@@ -260,6 +261,11 @@ function getOrCreateInstance(node: Node): ElementInstance | null {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (node as any)[INSTANCE_SYMBOL] = instance;
+
+    for (const child of node.childNodes) {
+      // Ensure our immediate children have nodes too.
+      getOrCreateInstance(child);
+    }
   }
 
   return instance;
@@ -343,16 +349,20 @@ const MO = new MutationObserver(entries => {
     }
 
     for (const node of entry.removedNodes) {
-      // Note: We don't want to recurse into the nodes here. Instead,
-      // we'll do that as part of the update, if necessary.
+      // Note: We'll recurse into the children as part of disposal,
+      // if it's necessary.
       const instance = getElementInstance(node);
       if (instance) {
         instance.dispose();
       }
     }
 
-    // Note: We don't want to recurse into the nodes here. Instead,
-    // we'll do that as part of the update, if necessary.
+    for (const node of entry.addedNodes) {
+      // Note: We'll recurse into the children as part of creation,
+      // if it's necessary.
+      getOrCreateInstance(node);
+    }
+
     if (entry.target instanceof Element) {
       scheduleUpdate(entry.target);
     }
@@ -364,6 +374,7 @@ MO.observe(documentElement, {
   attributes: true,
   attributeOldValue: true,
 });
+documentElement.querySelectorAll('link, style').forEach(getOrCreateInstance);
 scheduleUpdate(documentElement);
 
 function hasAllQueryNames(names: Set<string>, query: ContainerQueryDescriptor) {
@@ -381,8 +392,18 @@ function computeDimension(dimension: string) {
 
 function computeContainerType(containerType: string) {
   return containerType.length === 0
-    ? ContainerType.None
+    ? ContainerType.Normal
     : (parseInt(containerType) as ContainerType);
+}
+
+function computeInvalidContainer(displayType: string) {
+  const lowerDisplayType = displayType.toLowerCase();
+  return (
+    lowerDisplayType === 'none' ||
+    lowerDisplayType === 'contents' ||
+    lowerDisplayType.startsWith('table') ||
+    lowerDisplayType.startsWith('ruby')
+  );
 }
 
 function computeContainerNames(containerNames: string) {
@@ -410,30 +431,30 @@ function computeSizeFeatures(
   containerType: ContainerType,
   writingAxis: WritingAxis
 ) {
+  type Axis = {value?: number};
   const contentRect = entry.contentRect;
-  const sizeFeatures = {
-    width:
-      containerType === ContainerType.InlineSize &&
-      writingAxis === WritingAxis.Vertical
-        ? undefined
-        : contentRect.width,
-    height:
-      containerType === ContainerType.InlineSize &&
-      writingAxis === WritingAxis.Horizontal
-        ? undefined
-        : contentRect.height,
-    inlineSize:
-      writingAxis === WritingAxis.Horizontal
-        ? contentRect.width
-        : contentRect.height,
-    blockSize:
-      containerType === ContainerType.InlineSize
-        ? undefined
-        : writingAxis === WritingAxis.Vertical
-        ? contentRect.width
-        : contentRect.height,
+  const horizontalAxis: Axis = {value: contentRect.width};
+  const verticalAxis: Axis = {value: contentRect.height};
+
+  let inlineAxis = horizontalAxis;
+  let blockAxis = verticalAxis;
+
+  if (writingAxis === WritingAxis.Vertical) {
+    const tmp = inlineAxis;
+    inlineAxis = blockAxis;
+    blockAxis = tmp;
+  }
+
+  if (containerType !== ContainerType.Size) {
+    blockAxis.value = undefined;
+  }
+
+  return {
+    width: horizontalAxis.value,
+    height: verticalAxis.value,
+    inlineSize: inlineAxis.value,
+    blockSize: blockAxis.value,
   };
-  return sizeFeatures;
 }
 
 function computeLocalTreeContext(
@@ -452,12 +473,19 @@ function computeLocalTreeContext(
   let conditions: Record<string, boolean> = context ? context.conditions : {};
   let queryContext: QueryContext | null = null;
 
-  if (containerType) {
-    queryContext = {
-      fontSize: computeDimension(styles.getPropertyValue('font-size')),
-      rootFontSize: computeDimension(rootStyles.getPropertyValue('font-size')),
-      sizeFeatures: computeSizeFeatures(entry, containerType, writingAxis),
-    };
+  if (containerType !== ContainerType.Normal) {
+    const isInvalidContainer = computeInvalidContainer(
+      styles.getPropertyValue('display')
+    );
+    queryContext = isInvalidContainer
+      ? queryContext
+      : {
+          fontSize: computeDimension(styles.getPropertyValue('font-size')),
+          rootFontSize: computeDimension(
+            rootStyles.getPropertyValue('font-size')
+          ),
+          sizeFeatures: computeSizeFeatures(entry, containerType, writingAxis),
+        };
 
     const containerNames = computeContainerNames(
       styles.getPropertyValue(CUSTOM_PROPERTY_NAME)
@@ -466,10 +494,9 @@ function computeLocalTreeContext(
 
     for (const query of queryDescriptors) {
       if (hasAllQueryNames(containerNames, query)) {
-        conditions[query.uid] = evaluateContainerCondition(
-          query.condition,
-          queryContext
-        );
+        conditions[query.uid] = queryContext
+          ? evaluateContainerCondition(query.condition, queryContext)
+          : false;
       }
     }
   }

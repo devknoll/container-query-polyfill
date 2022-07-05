@@ -173,6 +173,12 @@ export function consumeMediaCondition(
   return parseQueryCondition(parser, false, null);
 }
 
+export function consumeMediaConditionInParens(
+  parser: Parser<Node>
+): GenericExpressionNode | null {
+  return parseQueryInParens(parser);
+}
+
 export function parseMediaCondition(
   nodes: ReadonlyArray<Node>
 ): GenericExpressionNode | null {

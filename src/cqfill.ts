@@ -13,7 +13,7 @@
 
 import './engine.js';
 
-(window as any).waitForPolyfill = function() {
+(window as any).waitForPolyfill = function () {
   return new Promise<void>(resolve => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -21,7 +21,7 @@ import './engine.js';
       });
     });
   });
-}
+};
 
 function init() {
   const oldSupports = CSS.supports;

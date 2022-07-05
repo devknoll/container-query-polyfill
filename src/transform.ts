@@ -302,12 +302,14 @@ export function transpileStyleSheet(
           elementSelectors.add(elementSelector.map(serialize).join(''));
         }
 
-        queryDescriptors.push({
-          names: new Set(containerRule.names),
-          condition: containerRule.condition,
-          selector: Array.from(elementSelectors).join(', '),
-          uid,
-        });
+        if (elementSelectors.size > 0) {
+          queryDescriptors.push({
+            names: new Set(containerRule.names),
+            condition: containerRule.condition,
+            selector: Array.from(elementSelectors).join(', '),
+            uid,
+          });
+        }
 
         return {
           type: Type.AtRuleNode,
@@ -403,7 +405,7 @@ export function transpileStyleSheet(
       return result ? {...node, name: CUSTOM_PROPERTY_NAME} : node;
     } else if (node.name === 'container-type') {
       const result = parseContainerTypeProperty(node.value);
-      return result ? {...node, name: CUSTOM_PROPERTY_TYPE} : node;
+      return result != null ? {...node, name: CUSTOM_PROPERTY_TYPE} : node;
     }
     return {
       ...node,
@@ -483,12 +485,19 @@ export function transpileStyleSheet(
 
     if (containerType !== null) {
       declarations.push(
-        decl('contain', [
-          ...(containerType === ContainerType.Size ? [ident('size'), ws] : []),
-          ident('layout'),
-          ws,
-          ident('style'),
-        ]),
+        decl(
+          'contain',
+          containerType === ContainerType.Normal
+            ? [ident('initial')]
+            : [
+                ...(containerType === ContainerType.Size
+                  ? [ident('size'), ws]
+                  : []),
+                ident('layout'),
+                ws,
+                ident('style'),
+              ]
+        ),
         decl(CUSTOM_PROPERTY_TYPE, [int(`${containerType}`)])
       );
     }

@@ -114,7 +114,7 @@ export const enum SizeFeature {
 }
 
 export const enum ContainerType {
-  None = 0,
+  Normal = 1,
   Size,
   InlineSize,
 }
@@ -123,7 +123,7 @@ export interface SizeFeatures {
   width?: number;
   height?: number;
   blockSize?: number;
-  inlineSize: number;
+  inlineSize?: number;
 }
 
 export interface QueryContext {
@@ -149,7 +149,9 @@ function evaluateFeatureValue(
         : {type: ValueType.Unknown};
 
     case SizeFeature.InlineSize:
-      return {type: ValueType.Dimension, value: inlineSize, unit: 'px'};
+      return inlineSize != null
+        ? {type: ValueType.Dimension, value: inlineSize, unit: 'px'}
+        : {type: ValueType.Unknown};
 
     case SizeFeature.Height:
       return height != null
@@ -162,18 +164,18 @@ function evaluateFeatureValue(
         : {type: ValueType.Unknown};
 
     case SizeFeature.AspectRatio:
-      return blockSize != null
+      return width != null && height != null && height > 0
         ? {
             type: ValueType.Number,
-            value: inlineSize / blockSize,
+            value: width / height,
           }
         : {type: ValueType.Unknown};
 
     case SizeFeature.Orientation:
-      return blockSize != null
+      return width != null && height != null
         ? {
             type: ValueType.Orientation,
-            value: blockSize >= inlineSize ? 'portrait' : 'landscape',
+            value: height >= width ? 'portrait' : 'landscape',
           }
         : {type: ValueType.Unknown};
   }

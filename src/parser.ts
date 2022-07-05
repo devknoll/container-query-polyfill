@@ -28,7 +28,7 @@ import {
 } from './utils/css.js';
 import {consumeMediaFeature, FeatureType} from './utils/parse-media-feature.js';
 import {
-  consumeMediaCondition,
+  consumeMediaConditionInParens,
   GenericExpressionNode,
   GenericExpressionType,
 } from './utils/parse-media-query.js';
@@ -226,6 +226,8 @@ function consumeContainerNames(
       case 'initial':
       case 'inherit':
       case 'unset':
+      case 'normal':
+      case 'auto':
         return null;
 
       default:
@@ -234,10 +236,6 @@ function consumeContainerNames(
 
     parser.consume(1);
     names.push(name);
-
-    // TODO: The spec allows for multiple names but WPT does not.
-    // This function should be updated after that is clarified.
-    break;
   }
 
   return expectEof && parser.at(1).type !== Type.EOFToken ? null : names;
@@ -253,8 +251,9 @@ function consumeContainerType(parser: Parser<Node>): ContainerType | null {
   }
 
   switch (node.value.toLowerCase()) {
-    case 'none':
-      return ContainerType.None;
+    case 'normal':
+    case 'initial':
+      return ContainerType.Normal;
 
     case 'size':
       return ContainerType.Size;
@@ -298,9 +297,22 @@ export function parseContainerRule(
 ): ContainerRule | null {
   const parser = createNodeParser(nodes);
   const names = consumeContainerNames(parser, false);
-  const condition = transformExpression(consumeMediaCondition(parser));
 
-  return names !== null && condition !== null ? {names, condition} : null;
+  if (!names || names.length > 1) {
+    return null;
+  }
+
+  const condition = transformExpression(consumeMediaConditionInParens(parser));
+  if (!condition) {
+    return null;
+  }
+
+  consumeWhitespace(parser);
+  if (parser.at(1).type !== Type.EOFToken) {
+    return null;
+  }
+
+  return {names, condition};
 }
 
 function transformExpression(
