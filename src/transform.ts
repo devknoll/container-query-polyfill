@@ -30,6 +30,7 @@ import {
 } from './parser.js';
 import {
   AtRuleNode,
+  BlockNode,
   BlockType,
   createNodeParser,
   DeclarationNode,
@@ -56,7 +57,8 @@ export interface ContainerQueryDescriptor {
   names: Set<string>;
   condition: ExpressionNode;
   uid: string;
-  selector: string;
+  selector: string | null;
+  parent: ContainerQueryDescriptor | null;
 }
 
 let CONTAINER_ID = 0;
@@ -67,13 +69,10 @@ const CUSTOM_UNIT_MAP = {
   cqb: CUSTOM_UNIT_VARIABLE_CQB,
 };
 
-const BLOCK_PREFIX = parseStylesheet(
-  Array.from(
-    tokenize(
-      `* { ${CUSTOM_PROPERTY_TYPE}: initial; ${CUSTOM_PROPERTY_NAME}: initial; }`
-    )
-  )
-).value;
+interface ContainerContext {
+  parent: ContainerQueryDescriptor | null;
+  transformStyleRule: (rule: QualifiedRuleNode) => QualifiedRuleNode;
+}
 
 export function transpileStyleSheet(
   sheetSrc: string,
@@ -81,26 +80,31 @@ export function transpileStyleSheet(
 ): [string, ContainerQueryDescriptor[]] {
   const queryDescriptors: ContainerQueryDescriptor[] = [];
 
-  function transformStylesheet(node: RuleListBlock): RuleListBlock {
+  function transformStylesheet(
+    node: RuleListBlock,
+    context?: ContainerContext
+  ): RuleListBlock {
+    const ctx = context
+      ? context
+      : {
+          parent: null,
+          transformStyleRule: (rule: QualifiedRuleNode) => rule,
+        };
     return {
       ...node,
-      value: node.value.map(transformRule),
+      value: node.value.map(rule => {
+        switch (rule.type) {
+          case Type.AtRuleNode:
+            return transformAtRule(rule, ctx);
+
+          case Type.QualifiedRuleNode:
+            return transformStyleRule(rule, ctx);
+
+          default:
+            return rule;
+        }
+      }),
     };
-  }
-
-  function transformRule(
-    node: AtRuleNode | QualifiedRuleNode
-  ): AtRuleNode | QualifiedRuleNode {
-    switch (node.type) {
-      case Type.AtRuleNode:
-        return transformAtRule(node);
-
-      case Type.QualifiedRuleNode:
-        return transformQualifiedRule(node);
-
-      default:
-        return node;
-    }
   }
 
   function isEndOfSelector(n1: Node): boolean {
@@ -206,15 +210,60 @@ export function transpileStyleSheet(
     }
   }
 
-  function transformMediaAtRule(node: AtRuleNode): AtRuleNode {
+  function transformMediaAtRule(
+    node: AtRuleNode,
+    context: ContainerContext
+  ): AtRuleNode {
     return {
       ...node,
       value: node.value
         ? {
             ...node.value,
-            value: transformStylesheet(parseStylesheet(node.value.value.value)),
+            value: transformStylesheet(
+              parseStylesheet(node.value.value.value),
+              context
+            ),
           }
         : null,
+    };
+  }
+
+  function transformKeyframesAtRule(
+    node: AtRuleNode,
+    context: ContainerContext
+  ): AtRuleNode {
+    let value: BlockNode | null = null;
+    if (node.value) {
+      value = {
+        ...node.value,
+        value: {
+          type: BlockType.RuleList,
+          value: parseStylesheet(node.value.value.value).value.map(rule => {
+            switch (rule.type) {
+              case Type.QualifiedRuleNode:
+                return transformKeyframeRule(rule, context);
+
+              case Type.AtRuleNode:
+                return transformAtRule(rule, context);
+            }
+          }),
+        },
+      };
+    }
+
+    return {
+      ...node,
+      value,
+    };
+  }
+
+  function transformKeyframeRule(
+    node: QualifiedRuleNode,
+    context: ContainerContext
+  ): QualifiedRuleNode {
+    return {
+      ...node,
+      value: transformDeclarationBlock(node.value, context),
     };
   }
 
@@ -256,7 +305,10 @@ export function transpileStyleSheet(
     return node;
   }
 
-  function transformSupportsAtRule(node: AtRuleNode): AtRuleNode {
+  function transformSupportsAtRule(
+    node: AtRuleNode,
+    context: ContainerContext
+  ): AtRuleNode {
     let condition = parseMediaCondition(node.prelude);
     condition = condition ? transformSupportsExpression(condition) : null;
 
@@ -268,48 +320,53 @@ export function transpileStyleSheet(
       value: node.value
         ? {
             ...node.value,
-            value: transformStylesheet(parseStylesheet(node.value.value.value)),
+            value: transformStylesheet(
+              parseStylesheet(node.value.value.value),
+              context
+            ),
           }
-        : node.value,
+        : null,
     };
   }
 
-  function transformContainerAtRule(node: AtRuleNode): AtRuleNode {
+  function transformContainerAtRule(
+    node: AtRuleNode,
+    context: ContainerContext
+  ): AtRuleNode {
     if (node.value) {
       const containerRule = parseContainerRule(node.prelude);
       if (containerRule) {
-        const uid = `c${CONTAINER_ID++}`;
-        const originalRules = transformStylesheet(
-          parseStylesheet(node.value.value.value)
-        ).value;
-        const transformedRules: Array<QualifiedRuleNode> = [];
+        const descriptor: ContainerQueryDescriptor = {
+          names: new Set(containerRule.names),
+          condition: containerRule.condition,
+          selector: null,
+          parent: context.parent,
+          uid: `c${CONTAINER_ID++}`,
+        };
         const elementSelectors = new Set<string>();
+        const transformedRules = transformStylesheet(
+          parseStylesheet(node.value.value.value),
+          {
+            parent: descriptor,
+            transformStyleRule: rule => {
+              const [elementSelector, styleSelector] = transformSelector(
+                rule.prelude,
+                descriptor.uid
+              );
 
-        for (const rule of originalRules) {
-          if (rule.type !== Type.QualifiedRuleNode) {
-            continue;
+              elementSelectors.add(elementSelector.map(serialize).join(''));
+              return {
+                ...rule,
+                prelude: styleSelector,
+              };
+            },
           }
-
-          const [elementSelector, styleSelector] = transformSelector(
-            rule.prelude,
-            uid
-          );
-
-          transformedRules.push({
-            ...rule,
-            prelude: styleSelector,
-          });
-          elementSelectors.add(elementSelector.map(serialize).join(''));
-        }
+        ).value;
 
         if (elementSelectors.size > 0) {
-          queryDescriptors.push({
-            names: new Set(containerRule.names),
-            condition: containerRule.condition,
-            selector: Array.from(elementSelectors).join(', '),
-            uid,
-          });
+          descriptor.selector = Array.from(elementSelectors).join(', ');
         }
+        queryDescriptors.push(descriptor);
 
         return {
           type: Type.AtRuleNode,
@@ -319,7 +376,7 @@ export function transpileStyleSheet(
             ...node.value,
             value: {
               type: BlockType.RuleList,
-              value: [...BLOCK_PREFIX, ...transformedRules],
+              value: transformedRules,
             },
           },
         };
@@ -329,16 +386,22 @@ export function transpileStyleSheet(
     return node;
   }
 
-  function transformAtRule(node: AtRuleNode): AtRuleNode {
+  function transformAtRule(
+    node: AtRuleNode,
+    context: ContainerContext
+  ): AtRuleNode {
     switch (node.name.toLocaleLowerCase()) {
       case 'media':
-        return transformMediaAtRule(node);
+        return transformMediaAtRule(node, context);
+
+      case 'keyframes':
+        return transformKeyframesAtRule(node, context);
 
       case 'supports':
-        return transformSupportsAtRule(node);
+        return transformSupportsAtRule(node, context);
 
       case 'container':
-        return transformContainerAtRule(node);
+        return transformContainerAtRule(node, context);
 
       default:
         return node;
@@ -413,16 +476,19 @@ export function transpileStyleSheet(
     };
   }
 
-  function transformQualifiedRule(node: QualifiedRuleNode): QualifiedRuleNode {
+  function transformDeclarationBlock(
+    node: BlockNode,
+    context: ContainerContext
+  ): BlockNode {
     const declarations: Array<AtRuleNode | DeclarationNode> = [];
     let containerNames: string[] | null = null;
     let containerType: ContainerType | null = null;
 
-    for (const declaration of node.value.value.value) {
+    for (const declaration of node.value.value) {
       switch (declaration.type) {
         case Type.AtRuleNode:
           {
-            const newAtRule = transformAtRule(declaration);
+            const newAtRule = transformAtRule(declaration, context);
             if (newAtRule) {
               declarations.push(newAtRule);
             }
@@ -505,13 +571,20 @@ export function transpileStyleSheet(
     return {
       ...node,
       value: {
-        ...node.value,
-        value: {
-          type: BlockType.StyleBlock,
-          value: declarations,
-        },
+        type: BlockType.DeclarationList,
+        value: declarations,
       },
     };
+  }
+
+  function transformStyleRule(
+    node: QualifiedRuleNode,
+    context: ContainerContext
+  ): QualifiedRuleNode {
+    return context.transformStyleRule({
+      ...node,
+      value: transformDeclarationBlock(node.value, context),
+    });
   }
 
   const tokens = Array.from(tokenize(sheetSrc));
@@ -533,10 +606,8 @@ export function transpileStyleSheet(
     }
   }
 
-  return [
-    serializeBlock(transformStylesheet(parseStylesheet(tokens, true))),
-    queryDescriptors,
-  ];
+  const rules = transformStylesheet(parseStylesheet(tokens, true));
+  return [serializeBlock(rules), queryDescriptors];
 }
 
 const ws: Node = {type: Type.WhitespaceToken};

@@ -126,10 +126,26 @@ export interface SizeFeatures {
   inlineSize?: number;
 }
 
+export const enum WritingAxis {
+  Horizontal = 0,
+  Vertical,
+}
+
+export interface TreeContext {
+  cqw: number | null;
+  cqh: number | null;
+  fontSize: number;
+  rootFontSize: number;
+  writingAxis: WritingAxis;
+}
+
 export interface QueryContext {
+  writingAxis: WritingAxis;
   fontSize: number;
   rootFontSize: number;
   sizeFeatures: SizeFeatures;
+  cqw: number | null;
+  cqh: number | null;
 }
 
 function evaluateFeatureValue(
@@ -242,18 +258,21 @@ function evaluateDimensionToPixels(
   }
 }
 
-function compareDimensions(
-  lhs: DimensionValue,
-  rhs: DimensionValue,
-  operator: ComparisonOperator,
+function coerceToPixelDimension(
+  value: Value,
   context: QueryContext
-): Value {
-  const left = evaluateDimensionToPixels(lhs, context);
-  const right = evaluateDimensionToPixels(rhs, context);
+): number | null {
+  switch (value.type) {
+    case ValueType.Number:
+      // https://drafts.csswg.org/css-values-4/#lengths
+      return value.value === 0 ? 0 : null;
 
-  return left === null || right === null
-    ? {type: ValueType.Unknown}
-    : compareNumericValue(left, right, operator);
+    case ValueType.Dimension:
+      return evaluateDimensionToPixels(value, context);
+
+    default:
+      return null;
+  }
 }
 
 function compareOrientations(
@@ -282,39 +301,36 @@ function evaluateComparisonExpression(
 ): Value {
   const left = evaluateExpressionToValue(node.left, context);
   const right = evaluateExpressionToValue(node.right, context);
-
-  const type = right.type;
-  if (
-    left.type === ValueType.Unknown ||
-    type === ValueType.Unknown ||
-    left.type !== type
-  ) {
-    return {type: ValueType.Unknown};
-  }
-
   const operator = node.operator;
-  switch (type) {
-    case ValueType.Number:
-      return compareNumericValue(
-        (left as NumberValue).value,
-        right.value,
-        operator
-      );
 
-    case ValueType.Dimension:
-      return compareDimensions(
-        left as DimensionValue,
-        right,
-        operator,
-        context
-      );
+  if (
+    left.type === ValueType.Orientation &&
+    right.type === ValueType.Orientation
+  ) {
+    return compareOrientations(left, right, operator);
+  } else if (
+    left.type === ValueType.Boolean &&
+    right.type === ValueType.Boolean
+  ) {
+    return compareBooleans(left, right, operator);
+  } else if (
+    left.type === ValueType.Dimension ||
+    right.type === ValueType.Dimension
+  ) {
+    const lhs = coerceToPixelDimension(left, context);
+    const rhs = coerceToPixelDimension(right, context);
 
-    case ValueType.Orientation:
-      return compareOrientations(left as OrientationValue, right, operator);
-
-    case ValueType.Boolean:
-      return compareBooleans(left as BooleanValue, right, operator);
+    if (lhs != null && rhs != null) {
+      return compareNumericValue(lhs, rhs, operator);
+    }
+  } else if (
+    left.type === ValueType.Number &&
+    right.type === ValueType.Number
+  ) {
+    return compareNumericValue(left.value, right.value, operator);
   }
+
+  return {type: ValueType.Unknown};
 }
 
 function evaluateConjunctionExpression(
@@ -324,15 +340,12 @@ function evaluateConjunctionExpression(
   const left = evaluateExpressionToBoolean(node.left, context);
   const right = evaluateExpressionToBoolean(node.right, context);
 
-  const leftValue = left.type === ValueType.Boolean ? left.value : null;
-  const rightValue = right.type === ValueType.Boolean ? right.value : null;
-
-  return leftValue === null && rightValue === null
-    ? {type: ValueType.Unknown}
-    : {
+  return left.type === ValueType.Boolean && right.type === ValueType.Boolean
+    ? {
         type: ValueType.Boolean,
-        value: leftValue === true && rightValue === true,
-      };
+        value: left.value === true && right.value === true,
+      }
+    : {type: ValueType.Unknown};
 }
 
 function evaluateDisjunctionExpression(
@@ -342,15 +355,12 @@ function evaluateDisjunctionExpression(
   const left = evaluateExpressionToBoolean(node.left, context);
   const right = evaluateExpressionToBoolean(node.right, context);
 
-  const leftValue = left.type === ValueType.Boolean ? left.value : null;
-  const rightValue = right.type === ValueType.Boolean ? right.value : null;
-
-  return leftValue === null && rightValue === null
-    ? {type: ValueType.Unknown}
-    : {
+  return left.type === ValueType.Boolean && right.type === ValueType.Boolean
+    ? {
         type: ValueType.Boolean,
-        value: leftValue === true || rightValue === true,
-      };
+        value: left.value === true || right.value === true,
+      }
+    : {type: ValueType.Unknown};
 }
 
 function evaluateExpressionToBoolean(
@@ -389,7 +399,7 @@ function evaluateExpressionToBoolean(
 export function evaluateContainerCondition(
   condition: ExpressionNode,
   context: QueryContext
-): boolean {
+): boolean | null {
   const result = evaluateExpressionToBoolean(condition, context);
-  return result.type === ValueType.Boolean && result.value === true;
+  return result.type === ValueType.Boolean ? result.value : null;
 }

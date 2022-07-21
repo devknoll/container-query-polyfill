@@ -217,8 +217,8 @@ function consumeContainerNames(
       break;
     }
 
-    const name = next.value.toLowerCase();
-    switch (name) {
+    const name = next.value;
+    switch (name.toLowerCase()) {
       case 'not':
       case 'and':
       case 'or':
