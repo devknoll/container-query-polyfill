@@ -28,7 +28,7 @@ import {
 } from './utils/css.js';
 import {consumeMediaFeature, FeatureType} from './utils/parse-media-feature.js';
 import {
-  consumeMediaConditionInParens,
+  consumeMediaCondition,
   GenericExpressionNode,
   GenericExpressionType,
 } from './utils/parse-media-query.js';
@@ -202,6 +202,21 @@ function parseSizeFeature(parser: Parser<Node>): ExpressionNode | null {
   }
 }
 
+function isValidContainerName(name: string) {
+  switch (name.toLowerCase()) {
+    case 'none':
+    case 'and':
+    case 'not':
+    case 'or':
+    case 'normal':
+    case 'auto':
+      return false;
+
+    default:
+      return true;
+  }
+}
+
 function consumeContainerNames(
   parser: Parser<Node>,
   expectEof: boolean
@@ -218,20 +233,8 @@ function consumeContainerNames(
     }
 
     const name = next.value;
-    switch (name.toLowerCase()) {
-      case 'not':
-      case 'and':
-      case 'or':
-      case 'none':
-      case 'initial':
-      case 'inherit':
-      case 'unset':
-      case 'normal':
-      case 'auto':
-        return null;
-
-      default:
-        break;
+    if (!isValidContainerName(name)) {
+      break;
     }
 
     parser.consume(1);
@@ -302,7 +305,7 @@ export function parseContainerRule(
     return null;
   }
 
-  const condition = transformExpression(consumeMediaConditionInParens(parser));
+  const condition = transformExpression(consumeMediaCondition(parser));
   if (!condition) {
     return null;
   }

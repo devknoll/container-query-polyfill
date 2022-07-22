@@ -140,12 +140,8 @@ export interface TreeContext {
 }
 
 export interface QueryContext {
-  writingAxis: WritingAxis;
-  fontSize: number;
-  rootFontSize: number;
   sizeFeatures: SizeFeatures;
-  cqw: number | null;
-  cqh: number | null;
+  treeContext: TreeContext;
 }
 
 function evaluateFeatureValue(
@@ -239,19 +235,82 @@ function compareNumericValue(
   }
 }
 
+function transformNullableNumbers(
+  lhs: number | null,
+  rhs: number | null,
+  transform: (lhs: number, rhs: number) => number
+): number | null {
+  if (lhs == null) {
+    return rhs;
+  } else if (rhs == null) {
+    return lhs;
+  } else {
+    return transform(lhs, rhs);
+  }
+}
+
+function getContainerRelativeLengthScale(
+  unit: 'cqw' | 'cqh' | 'cqi' | 'cqb' | 'cqmin' | 'cqmax',
+  treeContext: TreeContext
+): number | null {
+  switch (unit) {
+    case 'cqw':
+      return treeContext.cqw;
+
+    case 'cqh':
+      return treeContext.cqh;
+
+    case 'cqi':
+      return treeContext.writingAxis === WritingAxis.Horizontal
+        ? treeContext.cqw
+        : treeContext.cqh;
+
+    case 'cqb':
+      return treeContext.writingAxis === WritingAxis.Vertical
+        ? treeContext.cqw
+        : treeContext.cqh;
+
+    case 'cqmin':
+      return transformNullableNumbers(
+        getContainerRelativeLengthScale('cqi', treeContext),
+        getContainerRelativeLengthScale('cqb', treeContext),
+        Math.min
+      );
+
+    case 'cqmax':
+      return transformNullableNumbers(
+        getContainerRelativeLengthScale('cqi', treeContext),
+        getContainerRelativeLengthScale('cqb', treeContext),
+        Math.max
+      );
+  }
+}
+
 function evaluateDimensionToPixels(
   dimension: DimensionValue,
-  context: QueryContext
+  {treeContext}: QueryContext
 ): number | null {
   switch (dimension.unit) {
     case 'px':
       return dimension.value;
 
     case 'rem':
-      return dimension.value * context.rootFontSize;
+      return dimension.value * treeContext.rootFontSize;
 
     case 'em':
-      return dimension.value * context.fontSize;
+      return dimension.value * treeContext.fontSize;
+
+    case 'cqw':
+    case 'cqh':
+    case 'cqi':
+    case 'cqb':
+    case 'cqmin':
+    case 'cqmax':
+      return transformNullableNumbers(
+        dimension.value,
+        getContainerRelativeLengthScale(dimension.unit, treeContext),
+        (lhs, rhs) => lhs * rhs
+      );
 
     default:
       return null;

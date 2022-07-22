@@ -30,7 +30,7 @@ jobs:
       - name: Build
         run: |
           npm install
-          npm run build
+          npm run build:wpt
 
       - name: Setup WPT
         run: |
@@ -41,5 +41,5 @@ jobs:
         run: |
           npm run serve &
           ./wpt/wpt manifest
-          ./wpt/wpt serve --inject-script=${{ github.workspace }}/dist/src/cqfill.iife.min.js &
+          ./wpt/wpt serve --inject-script=${{ github.workspace }}/dist/src/cqfill.modern.js &
           npm test

@@ -14,7 +14,6 @@
 import {
   ContainerType,
   evaluateContainerCondition,
-  QueryContext,
   TreeContext,
   WritingAxis,
 } from './evaluate.js';
@@ -52,283 +51,61 @@ interface QueryContainerState {
 
 interface LayoutState {
   conditions: Record<string, QueryContainerState>;
-  treeContext: TreeContext;
+  context: TreeContext;
+  isQueryContainer: boolean;
 }
 
 type QueryDescriptorArray = Iterable<ContainerQueryDescriptor>;
 
-const ELEMENT_TO_DESCRIPTORS_MAP: Map<Element, QueryDescriptorArray> =
-  new Map();
-
-const CONTROLLER_SYMBOL: unique symbol = Symbol('CQ_CONTROLLER');
 const INSTANCE_SYMBOL: unique symbol = Symbol('CQ_INSTANCE');
-const QUERY_CONTAINER_ELEMENTS: Set<GenericElementInstance> = new Set();
 const SUPPORTS_SMALL_VIEWPORT_UNITS = CSS.supports('width: 1svh');
-const SUPPORTS_WRITING_MODE = CSS.supports('writing-mode: auto');
 
-const documentElement = document.documentElement;
-const rootEl = document.createElement(`cq-polyfill-${PER_RUN_UID}`);
-const rootStyles = window.getComputedStyle(rootEl);
+const WIDTH_BORDER_BOX_PROPERTIES: string[] = [
+  'padding-left',
+  'padding-right',
+  'border-left-width',
+  'border-right-width',
+];
 
-const rootStyleEl = document.createElement('style');
-rootStyleEl.innerHTML = `* { ${CUSTOM_PROPERTY_TYPE}: ${ContainerType.Normal}; ${CUSTOM_PROPERTY_NAME}: none; }`;
-document.head.prepend(rootStyleEl);
+const HEIGHT_BORDER_BOX_PROPERTIES: string[] = [
+  'padding-top',
+  'padding-bottom',
+  'border-top-width',
+  'border-bottom-width',
+];
 
 (window as any).CQ_SYMBOL = INSTANCE_SYMBOL;
-
-rootEl.style.cssText =
-  'position: fixed; top: 0; left: 0; right: 0; bottom: 0; visibility: hidden; font-size: 1rem; transition: font-size 1e-8ms;';
-documentElement.appendChild(rootEl);
 
 interface ViewportChangeContext {
   viewportChanged(size: PhysicalSize): void;
 }
 
 interface StyleSheetContext {
-  register(source: string, url?: URL): StyleSheetInstance;
-}
-
-interface ChildNodeContext {
-  // ...
+  registerStyleSheet(source: string, url?: URL): StyleSheetInstance;
 }
 
 interface StyleSheetInstance {
   source: string;
   dispose(): void;
+  refresh(): void;
 }
 
-class NodeController<T extends Node, C> {
-  node: T;
-  context: C;
-
-  constructor(node: T, context: C) {
-    this.node = node;
-    this.context = context;
-  }
-
-  connected() {
-    // ...
-  }
-
-  disconnected() {
-    // ...
-  }
-
-  resized() {
-    // ...
-  }
-
-  parentResized() {
-    // ...
-  }
-
-  mutated() {
-    // ...
-  }
-}
-
-class ChildNodeController<T extends Node, C> extends NodeController<
-  T,
-  C & ChildNodeContext
-> {
-  // ...
-}
-
-class LinkElementController extends ChildNodeController<
-  HTMLLinkElement,
-  StyleSheetContext
-> {
-  #isConnected = false;
-  #styleSheet: StyleSheetInstance | null = null;
-
-  connected(): void {
-    this.#isConnected = true;
-    const node = this.node;
-    if (node.rel === 'stylesheet') {
-      const srcUrl = new URL(node.href, document.baseURI);
-      if (srcUrl.origin === location.origin) {
-        fetch(srcUrl.toString())
-          .then(r => r.text())
-          .then(src => {
-            if (this.#isConnected) {
-              this.#styleSheet = this.context.register(src, srcUrl);
-              const blob = new Blob([this.#styleSheet.source], {
-                type: 'text/css',
-              });
-              node.href = URL.createObjectURL(blob);
-            }
-          });
-      }
-    }
-  }
-
-  disconnected(): void {
-    this.#isConnected = false;
-    if (this.#styleSheet) {
-      this.#styleSheet.dispose();
-      this.#styleSheet = null;
-    }
-  }
-}
-
-class StyleElementController extends ChildNodeController<
-  HTMLStyleElement,
-  StyleSheetContext
-> {
-  #styleSheet: StyleSheetInstance | null = null;
-
-  connected(): void {
-    const node = this.node;
-    this.#styleSheet = this.context.register(node.innerHTML);
-    node.innerHTML = this.#styleSheet.source;
-  }
-
-  disconnected(): void {
-    if (this.#styleSheet) {
-      this.#styleSheet.dispose();
-      this.#styleSheet = null;
-    }
-  }
-}
-
-class GlobalStyleElementController extends NodeController<
-  HTMLStyleElement,
-  unknown
-> {
-  connected(): void {
-    this.node.innerHTML = `* { ${CUSTOM_PROPERTY_TYPE}: ${ContainerType.Normal}; ${CUSTOM_PROPERTY_NAME}: none; }`;
-  }
-}
-
-class DummyElementController extends ChildNodeController<
-  HTMLElement,
-  ViewportChangeContext
-> {
-  connected(): void {
-    this.node.style.cssText =
-      'position: fixed; top: 0; left: 0; right: 0; bottom: 0; visibility: hidden; font-size: 1rem; transition: font-size 1e-8ms;';
-  }
-
-  resized(): void {
-    const node = this.node;
-    this.context.viewportChanged({
-      width: node.clientWidth,
-      height: node.clientHeight,
-    });
-  }
-}
-
-class HtmlElementController
-  extends NodeController<HTMLElement, unknown>
-  implements ViewportChangeContext
-{
-  viewportChanged(size: PhysicalSize): void {
-    // ...
-  }
-}
-
-interface LocalContainerParams {
-  type: ContainerType;
-  names: Set<string>;
-  width?: number;
-  height?: number;
-  inlineSize?: number;
-  blockSize?: number;
+interface ParsedLayoutData {
+  width: number;
+  height: number;
+  writingAxis: WritingAxis;
   fontSize: number;
 }
 
-interface ElementLayoutData {
-  writingAxis: WritingAxis;
-  localParams: LocalContainerParams | null;
-}
-
-class ElementLayoutManager {
-  #styles: CSSStyleDeclaration;
-  #cachedLayoutData: ElementLayoutData | null;
-
-  constructor(element: Element) {
-    this.#styles = window.getComputedStyle(element);
-    this.#cachedLayoutData = null;
-  }
-
-  invalidate(): void {
-    this.#cachedLayoutData = null;
-  }
-
-  #computeSizeFeatures(type: ContainerType, writingAxis: WritingAxis) {
-    type Axis = {value?: number};
-    const styles = this.#styles;
-    const horizontalAxis: Axis = {
-      value: computeDimension(styles.getPropertyValue('width')),
-    };
-    const verticalAxis: Axis = {
-      value: computeDimension(styles.getPropertyValue('height')),
-    };
-
-    let inlineAxis = horizontalAxis;
-    let blockAxis = verticalAxis;
-
-    if (writingAxis === WritingAxis.Vertical) {
-      const tmp = inlineAxis;
-      inlineAxis = blockAxis;
-      blockAxis = tmp;
-    }
-
-    if (type !== ContainerType.Size) {
-      blockAxis.value = undefined;
-    }
-
-    return {
-      width: horizontalAxis.value,
-      height: verticalAxis.value,
-      inlineSize: inlineAxis.value,
-      blockSize: blockAxis.value,
-    };
-  }
-
-  get(): ElementLayoutData {
-    let layoutData = this.#cachedLayoutData;
-
-    if (!layoutData) {
-      const styles = this.#styles;
-      const writingAxis = computeWritingAxis(
-        styles.getPropertyValue('writing-mode')
-      );
-      const containerType = computeContainerType(
-        styles.getPropertyValue(CUSTOM_PROPERTY_TYPE)
-      );
-
-      let localParams: LocalContainerParams | null = null;
-      if (containerType !== ContainerType.Normal) {
-        const isValidContainer = computeValidContainer(
-          styles.getPropertyValue('display')
-        );
-
-        if (isValidContainer) {
-          localParams = {
-            type: containerType,
-            names: computeContainerNames(
-              styles.getPropertyValue(CUSTOM_PROPERTY_NAME)
-            ),
-            fontSize: computeDimension(styles.getPropertyValue('font-size')),
-            ...this.#computeSizeFeatures(containerType, writingAxis),
-          };
-        }
-      }
-
-      this.#cachedLayoutData = layoutData = {
-        writingAxis,
-        localParams,
-      };
-    }
-    return layoutData;
-  }
+interface LayoutStateContext {
+  getParentState(): LayoutState;
+  getQueryDescriptors(): Iterable<ContainerQueryDescriptor>;
 }
 
 function initializePolyfill() {
   interface Instance {
     depth: number;
-    layoutManager: ElementLayoutManager | null;
+    state: LayoutStateManager;
 
     connect(): void;
     disconnect(): void;
@@ -348,12 +125,17 @@ function initializePolyfill() {
     return;
   }
 
+  let cachedQueryDescriptors: ContainerQueryDescriptor[] | null = null;
+
   const dummyElement = document.createElement(`cq-polyfill-${PER_RUN_UID}`);
   const globalStyleElement = document.createElement('style');
   const mutationObserver = new MutationObserver(mutations => {
     for (const entry of mutations) {
+      cachedQueryDescriptors = null;
+
       for (const node of entry.removedNodes) {
         const instance = getInstance(node);
+        // Note: We'll recurse into the nodes during the disconnect.
         instance?.disconnect();
       }
 
@@ -361,8 +143,8 @@ function initializePolyfill() {
         entry.type === 'attributes' &&
         entry.attributeName &&
         (entry.attributeName === DATA_ATTRIBUTE_NAME ||
-          (entry instanceof Element &&
-            entry.getAttribute(entry.attributeName) === entry.oldValue))
+          (entry.target instanceof Element &&
+            entry.target.getAttribute(entry.attributeName) === entry.oldValue))
       ) {
         continue;
       }
@@ -379,40 +161,128 @@ function initializePolyfill() {
     attributeOldValue: true,
   });
 
+  const pendingMutations: Array<() => void> = [];
+  let shouldQueueMutations = false;
+  function queueMutation(callback: () => void) {
+    if (shouldQueueMutations) {
+      pendingMutations.push(callback);
+    } else {
+      callback();
+    }
+  }
+
+  const pendingResize: Set<Node> = new Set();
   const resizeObserver = new ResizeObserver(entries => {
-    entries
-      .map(entry => getOrCreateInstance(entry.target))
-      .sort((a, b) => a.depth - b.depth)
-      .forEach(instance => instance.resize());
+    try {
+      shouldQueueMutations = true;
+      entries
+        .map(entry => {
+          const node = entry.target;
+          pendingResize.add(node);
+          return getOrCreateInstance(node);
+        })
+        .sort((a, b) => a.depth - b.depth)
+        .forEach(instance => instance.resize());
+    } finally {
+      pendingResize.clear();
+      shouldQueueMutations = false;
+      pendingMutations.forEach(callback => callback());
+      pendingMutations.length = 0;
+    }
   });
 
-  const rootController = new HtmlElementController(documentElement, {});
-  const allQueryDescriptors: Set<QueryDescriptorArray> = new Set();
-  const styleSheetRegistry: StyleSheetContext = {
-    register(source, url) {
-      const [transpiledSource, queryDescriptors] = transpileStyleSheet(
-        source,
-        url ? url.toString() : undefined
-      );
-      allQueryDescriptors.add(queryDescriptors);
+  function forceUpdate(el: Element) {
+    resizeObserver.unobserve(el);
+    resizeObserver.observe(el);
+  }
 
-      return {
-        source: transpiledSource,
-        dispose() {
-          allQueryDescriptors.delete(queryDescriptors);
-        },
-      };
-    },
+  const rootController = new NodeController(documentElement);
+  const queryDescriptorMap: Map<Node, QueryDescriptorArray> = new Map();
+  function registerStyleSheet(node: Node, source: string, url?: URL) {
+    const [transpiledSource, queryDescriptors] = transpileStyleSheet(
+      source,
+      url ? url.toString() : undefined
+    );
+    queryDescriptorMap.set(node, queryDescriptors);
+    cachedQueryDescriptors = null;
+    forceUpdate(documentElement);
+
+    return {
+      source: transpiledSource,
+      dispose() {
+        queryDescriptorMap.delete(node);
+      },
+      refresh() {
+        forceUpdate(documentElement);
+      },
+    };
+  }
+
+  function getQueryDescriptors() {
+    if (!cachedQueryDescriptors) {
+      cachedQueryDescriptors = [];
+
+      for (const styleSheet of document.styleSheets) {
+        const ownerNode = styleSheet.ownerNode;
+        if (ownerNode instanceof Element) {
+          const queryDescriptors = queryDescriptorMap.get(ownerNode);
+          if (queryDescriptors) {
+            cachedQueryDescriptors.push(...queryDescriptors);
+          }
+        }
+      }
+    }
+    return cachedQueryDescriptors;
+  }
+
+  const fallbackContainerUnits: {cqw: number | null; cqh: number | null} = {
+    cqw: null,
+    cqh: null,
   };
+  function viewportChanged({width, height}: PhysicalSize) {
+    fallbackContainerUnits.cqw = width;
+    fallbackContainerUnits.cqh = height;
+  }
+
+  function updateAttributes(node: Node, state: LayoutStateManager | null) {
+    if (node instanceof Element && state) {
+      const attributes = state.computeAttributesForElement(node);
+      queueMutation(() => {
+        if (attributes.length > 0) {
+          node.setAttribute(DATA_ATTRIBUTE_NAME, attributes.join(' '));
+        } else {
+          node.removeAttribute(DATA_ATTRIBUTE_NAME);
+        }
+      });
+    }
+  }
 
   function getOrCreateInstance(node: Node): Instance {
     let instance = getInstance(node);
     if (!instance) {
-      let innerController: NodeController<Node, unknown>;
+      let innerController: NodeController<Node>;
+      let parentState: LayoutStateManager | null = null;
+      let state: LayoutStateManager;
       let depth = 0;
 
       if (node === documentElement) {
         innerController = rootController;
+        state = new LayoutStateManager(documentElement, {
+          getParentState() {
+            const context = state.getLayoutData();
+            return {
+              conditions: {},
+              context: {
+                ...fallbackContainerUnits,
+                fontSize: context.fontSize,
+                rootFontSize: context.fontSize,
+                writingAxis: context.writingAxis,
+              },
+              isQueryContainer: false,
+            };
+          },
+          getQueryDescriptors,
+        });
       } else {
         const parentNode = node.parentNode;
         const parentController = parentNode ? getInstance(parentNode) : null;
@@ -421,59 +291,142 @@ function initializePolyfill() {
           throw new Error('Expected node to have parent');
         }
 
+        parentState = parentController.state;
+        state =
+          node instanceof Element
+            ? new LayoutStateManager(node, {
+                getParentState() {
+                  return parentController.state.get();
+                },
+                getQueryDescriptors,
+              })
+            : parentState;
         depth = parentController.depth + 1;
+
         if (node === dummyElement) {
-          innerController = new DummyElementController(
-            dummyElement,
-            rootController
-          );
+          innerController = new DummyElementController(dummyElement, {
+            viewportChanged,
+          });
         } else if (node === globalStyleElement) {
           innerController = new GlobalStyleElementController(
-            globalStyleElement,
-            {}
+            globalStyleElement
           );
         } else if (node instanceof HTMLLinkElement) {
-          innerController = new LinkElementController(node, styleSheetRegistry);
+          innerController = new LinkElementController(node, {
+            registerStyleSheet: (...args) => registerStyleSheet(node, ...args),
+          });
         } else if (node instanceof HTMLStyleElement) {
-          innerController = new StyleElementController(
-            node,
-            styleSheetRegistry
-          );
+          innerController = new StyleElementController(node, {
+            registerStyleSheet: (...args) => registerStyleSheet(node, ...args),
+          });
         } else {
-          innerController = new NodeController(node, {});
+          innerController = new NodeController(node);
         }
       }
 
+      const scheduleUpdate =
+        node instanceof Element
+          ? () => forceUpdate(node)
+          : () => {
+              /* NOOP */
+            };
+      const inlineStyles =
+        node instanceof HTMLElement || node instanceof SVGElement
+          ? node.style
+          : null;
+
       instance = {
         depth,
-        layoutManager:
-          node instanceof Element ? new ElementLayoutManager(node) : null,
+        state,
 
         connect() {
           if (node instanceof Element) {
             resizeObserver.observe(node);
           }
           for (const child of node.childNodes) {
-            const instance = getOrCreateInstance(child);
-            instance.connect();
+            // Ensure all children are created and connected first.
+            getOrCreateInstance(child);
           }
           innerController.connected();
+          scheduleUpdate();
         },
 
         disconnect() {
           if (node instanceof Element) {
             resizeObserver.unobserve(node);
+            node.removeAttribute(DATA_ATTRIBUTE_NAME);
+          }
+          if (inlineStyles) {
+            inlineStyles.removeProperty(CUSTOM_UNIT_VARIABLE_CQI);
+            inlineStyles.removeProperty(CUSTOM_UNIT_VARIABLE_CQB);
+            inlineStyles.removeProperty(CUSTOM_UNIT_VARIABLE_CQW);
+            inlineStyles.removeProperty(CUSTOM_UNIT_VARIABLE_CQH);
           }
           for (const child of node.childNodes) {
             const instance = getInstance(child);
             instance?.disconnect();
           }
           innerController.disconnected();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          delete (node as any)[INSTANCE_SYMBOL];
         },
 
         resize() {
-          instance?.layoutManager?.invalidate();
-          innerController.resized();
+          state.invalidate();
+
+          if (inlineStyles) {
+            const currentState = state.get();
+            const context = currentState.context;
+            const writingAxis = context.writingAxis;
+
+            queueMutation(() => {
+              if (
+                !parentState ||
+                writingAxis !== parentState.get().context.writingAxis ||
+                currentState.isQueryContainer
+              ) {
+                inlineStyles.setProperty(
+                  CUSTOM_UNIT_VARIABLE_CQI,
+                  `var(${
+                    writingAxis === WritingAxis.Horizontal
+                      ? CUSTOM_UNIT_VARIABLE_CQW
+                      : CUSTOM_UNIT_VARIABLE_CQH
+                  })`
+                );
+                inlineStyles.setProperty(
+                  CUSTOM_UNIT_VARIABLE_CQB,
+                  `var(${
+                    writingAxis === WritingAxis.Vertical
+                      ? CUSTOM_UNIT_VARIABLE_CQW
+                      : CUSTOM_UNIT_VARIABLE_CQH
+                  })`
+                );
+              } else {
+                inlineStyles.removeProperty(CUSTOM_UNIT_VARIABLE_CQI);
+                inlineStyles.removeProperty(CUSTOM_UNIT_VARIABLE_CQB);
+              }
+
+              if (!parentState || currentState.isQueryContainer) {
+                if (context.cqw) {
+                  inlineStyles.setProperty(
+                    CUSTOM_UNIT_VARIABLE_CQW,
+                    context.cqw + 'px'
+                  );
+                }
+                if (context.cqh) {
+                  inlineStyles.setProperty(
+                    CUSTOM_UNIT_VARIABLE_CQH,
+                    context.cqh + 'px'
+                  );
+                }
+              } else {
+                inlineStyles.removeProperty(CUSTOM_UNIT_VARIABLE_CQW);
+                inlineStyles.removeProperty(CUSTOM_UNIT_VARIABLE_CQH);
+              }
+            });
+          }
+
+          innerController.resized(state);
           for (const child of node.childNodes) {
             const instance = getOrCreateInstance(child);
             instance.parentResize();
@@ -481,15 +434,23 @@ function initializePolyfill() {
         },
 
         parentResize() {
-          innerController.parentResized();
+          state.invalidate();
+          updateAttributes(node, parentState);
+
+          if (!pendingResize.has(node)) {
+            for (const child of node.childNodes) {
+              const instance = getOrCreateInstance(child);
+              instance.parentResize();
+            }
+          }
+          scheduleUpdate();
         },
 
         mutate() {
-          instance?.layoutManager?.invalidate();
           for (const child of node.childNodes) {
             getOrCreateInstance(child);
           }
-          innerController.mutated();
+          scheduleUpdate();
         },
       };
 
@@ -500,724 +461,328 @@ function initializePolyfill() {
     return instance;
   }
 
+  documentElement.prepend(globalStyleElement, dummyElement);
   getOrCreateInstance(documentElement);
-  documentElement.appendChild(dummyElement);
 }
 
-initializePolyfill();
-
-// abstract class ElementInstance<T extends Node> {
-//   node: T;
-//   depth: number;
-//   parent: ElementInstance<Node> | null;
-//   layoutState: LayoutState | null;
-
-//   constructor(node: T, parent: ElementInstance<Node> | null) {
-//     this.node = node;
-//     this.parent = parent;
-//     this.depth = (parent ? parent.depth : 0) + 1;
-//     this.layoutState = null;
-//   }
-
-//   connect(): void {
-//     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-//     (this.node as any)[INSTANCE_SYMBOL] = this;
-
-//     for (const childNode of this.node.childNodes) {
-//       // Ensure our children are created and connected first.
-//       ElementInstance.getOrCreate(childNode);
-//     }
-
-//     this.connected();
-//   }
-
-//   computeLayoutState(): LayoutState {
-//     throw new Error();
-//   }
-
-//   getLayoutState(): LayoutState {
-//     if (!this.layoutState) {
-//       this.layoutState = this.computeLayoutState();
-//     }
-//     return this.layoutState;
-//   }
-
-//   resize(entry: ResizeObserverEntry): void {
-//     this.layoutState = null;
-//     this.getLayoutState();
-
-//     this.resized();
-//     for (const childNode of this.node.childNodes) {
-//       const instance = ElementInstance.getOrCreate(childNode);
-//       if (instance) {
-//         instance.parentResized();
-//       }
-//     }
-//   }
-
-//   disconnect(): void {
-//     for (const childNode of this.node.childNodes) {
-//       const instance = ElementInstance.get(childNode);
-//       if (instance) {
-//         instance.disconnect();
-//       }
-//     }
-
-//     this.disconnected();
-//     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-//     delete (this.node as any)[INSTANCE_SYMBOL];
-//   }
-
-//   mutate(): void {
-//     for (const childNode of this.node.childNodes) {
-//       // Ensure any new children are created and connected first.
-//       ElementInstance.getOrCreate(childNode);
-//     }
-//     this.mutated();
-//   }
-
-//   connected(): void {
-//     // ...
-//   }
-
-//   disconnected(): void {
-//     // ...
-//   }
-
-//   resized(): void {
-//     // ...
-//   }
-
-//   parentResized(): void {
-//     // ...
-//   }
-
-//   mutated(): void {
-//     // ...
-//   }
-
-//   scheduleUpdate(): void {
-//     // ...
-//   }
-
-//   static get(node: Node): ElementInstance<Node> | null {
-//     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-//     return (node as any)[INSTANCE_SYMBOL] || null;
-//   }
-
-//   static getOrCreate(node: Node): ElementInstance<Node> | null {
-//     let instance = ElementInstance.get(node);
-//     if (!instance) {
-//       const parentNode = node.parentNode;
-//       const parentInstance = parentNode
-//         ? ElementInstance.getOrCreate(parentNode)
-//         : null;
-
-//       if (node === rootEl) {
-//         instance = new RootElementInstance(rootEl, parentInstance);
-//       } else if (node instanceof HTMLHeadElement) {
-//         instance = new HeadElementInstance(node, parentInstance);
-//       } else if (node instanceof HTMLLinkElement) {
-//         instance = new LinkElementInstance(node, parentInstance);
-//       } else if (node instanceof HTMLStyleElement) {
-//         instance = new StyleElementInstance(node, parentInstance);
-//       } else if (node instanceof HTMLElement || node instanceof SVGElement) {
-//         instance = new GenericElementInstance(node, parentInstance);
-//       }
-//       if (instance) {
-//         instance.connect();
-//       }
-//     }
-//     return instance ? instance : null;
-//   }
-// }
-
-// abstract class ResizableElementInstance<
-//   T extends Element
-// > extends ElementInstance<T> {
-//   styles: CSSStyleDeclaration;
-
-//   constructor(node: T, parent: ElementInstance<Node> | null) {
-//     super(node, parent);
-//     this.styles = window.getComputedStyle(node);
-//   }
-
-//   connected(): void {
-//     RO.observe(this.node);
-//   }
-
-//   disconnected(): void {
-//     RO.unobserve(this.node);
-//   }
-
-//   scheduleUpdate(): void {
-//     RO.unobserve(this.node);
-//     RO.observe(this.node);
-//   }
-// }
-
-// class RootElementInstance extends ResizableElementInstance<Element> {
-//   resized() {
-//     // return documentInstance ? documentInstance.resize(entry) : null;
-//     // documentElement.style.setProperty(
-//     //   CUSTOM_UNIT_VARIABLE_CQW,
-//     //   SUPPORTS_SMALL_VIEWPORT_UNITS
-//     //     ? '1svw'
-//     //     : entry.contentRect.width / 100 + 'px'
-//     // );
-//     // documentElement.style.setProperty(
-//     //   CUSTOM_UNIT_VARIABLE_CQH,
-//     //   SUPPORTS_SMALL_VIEWPORT_UNITS
-//     //     ? '1svh'
-//     //     : entry.contentRect.height / 100 + 'px'
-//     // );
-//     // return this.parentLayoutContext;
-//   }
-// }
-
-// class HeadElementInstance extends ElementInstance<HTMLHeadElement> {}
-
-// class LinkElementInstance extends ElementInstance<HTMLLinkElement> {
-//   isConnected = false;
-
-//   connected(): void {
-//     this.isConnected = true;
-
-//     const node = this.node;
-//     if (node.rel === 'stylesheet') {
-//       const srcUrl = new URL(node.href, document.baseURI);
-//       if (srcUrl.origin === location.origin) {
-//         fetch(srcUrl.toString())
-//           .then(r => r.text())
-//           .then(src => {
-//             const res = transpileStyleSheet(src, srcUrl.toString());
-//             const blob = new Blob([res[0]], {type: 'text/css'});
-
-//             const img = new Image();
-//             img.onload = img.onerror = () => {
-//               if (this.isConnected) {
-//                 ELEMENT_TO_DESCRIPTORS_MAP.set(node, res[1]);
-//               }
-//               if (documentInstance) {
-//                 documentInstance.scheduleUpdate();
-//               }
-//             };
-//             img.src = node.href = URL.createObjectURL(blob);
-//           });
-//       }
-//     }
-//   }
-
-//   disconnected(): void {
-//     this.isConnected = false;
-//     ELEMENT_TO_DESCRIPTORS_MAP.delete(this.node);
-//   }
-// }
-
-// class StyleElementInstance extends ElementInstance<HTMLStyleElement> {
-//   connected(): void {
-//     const node = this.node;
-//     const originalSrc = node.innerHTML;
-//     if (node !== rootStyleEl && originalSrc.length > 0) {
-//       const res = transpileStyleSheet(originalSrc);
-//       node.innerHTML = res[0];
-//       ELEMENT_TO_DESCRIPTORS_MAP.set(node, res[1]);
-//       if (documentInstance) {
-//         documentInstance.scheduleUpdate();
-//       }
-//     }
-//   }
-
-//   disconnected(): void {
-//     ELEMENT_TO_DESCRIPTORS_MAP.delete(this.node);
-//   }
-// }
-
-// class GenericElementInstance extends ResizableElementInstance<
-//   HTMLElement | SVGElement
-// > {
-//   styles: CSSStyleDeclaration;
-
-//   constructor(
-//     el: HTMLElement | SVGElement,
-//     parent: ElementInstance<Node> | null
-//   ) {
-//     super(el, parent);
-//     this.styles = window.getComputedStyle(el);
-//   }
-
-//   connected(): void {
-//     super.connected();
-//     this.updateContainerAttribute();
-//     this.scheduleUpdate();
-//   }
-
-//   resized() {
-//     // if (!this.parentLayoutContext) {
-//     //   return null;
-//     // }
-//     // const layoutState = computeLayoutState(
-//     //   this.styles,
-//     //   this.parentLayoutContext,
-//     //   entry
-//     // );
-//     // const layoutContext = layoutState.context;
-//     // const style = this.node.style;
-//     // const queryContext = layoutContext.queryContext;
-//     // if (queryContext) {
-//     //   QUERY_CONTAINER_ELEMENTS.add(this);
-//     //   const sizeFeatures = queryContext.sizeFeatures;
-//     //   if (sizeFeatures.width != null) {
-//     //     style.setProperty(
-//     //       CUSTOM_UNIT_VARIABLE_CQW,
-//     //       sizeFeatures.width / 100 + 'px'
-//     //     );
-//     //   }
-//     //   if (sizeFeatures.height != null) {
-//     //     style.setProperty(
-//     //       CUSTOM_UNIT_VARIABLE_CQH,
-//     //       sizeFeatures.height / 100 + 'px'
-//     //     );
-//     //   }
-//     // } else {
-//     //   QUERY_CONTAINER_ELEMENTS.delete(this);
-//     //   style.removeProperty(CUSTOM_UNIT_VARIABLE_CQW);
-//     //   style.removeProperty(CUSTOM_UNIT_VARIABLE_CQH);
-//     // }
-//     // const writingAxis = queryContext.writingAxis;
-//     // if (
-//     //   writingAxis !== layoutState.parentQueryContext.writingAxis ||
-//     //   queryContext
-//     // ) {
-//     //   style.setProperty(
-//     //     CUSTOM_UNIT_VARIABLE_CQI,
-//     //     `var(${
-//     //       writingAxis === WritingAxis.Horizontal
-//     //         ? CUSTOM_UNIT_VARIABLE_CQW
-//     //         : CUSTOM_UNIT_VARIABLE_CQH
-//     //     })`
-//     //   );
-//     //   style.setProperty(
-//     //     CUSTOM_UNIT_VARIABLE_CQB,
-//     //     `var(${
-//     //       writingAxis === WritingAxis.Vertical
-//     //         ? CUSTOM_UNIT_VARIABLE_CQW
-//     //         : CUSTOM_UNIT_VARIABLE_CQH
-//     //     })`
-//     //   );
-//     // } else {
-//     //   style.removeProperty(CUSTOM_UNIT_VARIABLE_CQI);
-//     //   style.removeProperty(CUSTOM_UNIT_VARIABLE_CQB);
-//     // }
-//     // return layoutContext;
-//   }
-
-//   parentResized(): void {
-//     this.updateContainerAttribute();
-//     this.scheduleUpdate();
-//   }
-
-//   mutated(): void {
-//     this.scheduleUpdate();
-//   }
-
-//   disconnected(): void {
-//     super.disconnected();
-//     this.node.removeAttribute(DATA_ATTRIBUTE_NAME);
-//     QUERY_CONTAINER_ELEMENTS.delete(this);
-//   }
-
-//   updateContainerAttribute() {
-//     const attributes: string[] = [];
-//     const node = this.node;
-
-//     // const parentContext = this.parentLayoutContext;
-//     // if (parentContext) {
-//     //   for (const queryDescriptors of getQueryDescriptors()) {
-//     //     for (const queryDescriptor of queryDescriptors) {
-//     //       const result = parentContext.conditions[queryDescriptor.uid];
-//     //       if (
-//     //         queryDescriptor.selector != null &&
-//     //         result != null &&
-//     //         result.condition &&
-//     //         node.matches(queryDescriptor.selector)
-//     //       ) {
-//     //         attributes.push(queryDescriptor.uid);
-//     //       }
-//     //     }
-//     //   }
-//     // }
-
-//     if (attributes.length > 0) {
-//       node.setAttribute(DATA_ATTRIBUTE_NAME, attributes.join(' '));
-//     } else {
-//       node.removeAttribute(DATA_ATTRIBUTE_NAME);
-//     }
-//   }
-// }
-
-// abstract class NodeController<T extends Node> {
-//   node: T;
-
-//   constructor(node: T) {
-//     this.node = node;
-//   }
-
-//   connected(): void {
-//     // ...
-//   }
-
-//   disconnected(): void {
-//     // ...
-//   }
-
-//   resized(): void {
-//     // ...
-//   }
-
-//   mutated(): void {
-//     // ...
-//   }
-
-//   abstract computeLayoutState(): LayoutState;
-// }
-
-// interface LayoutStateProvider {
-//   getLayoutState(): LayoutState;
-// }
-
-// class ChildNodeController<T extends Node> extends NodeController<T> {
-//   provider: LayoutStateProvider;
-
-//   constructor(node: T, provider: LayoutStateProvider) {
-//     super(node);
-//     this.provider = provider;
-//   }
-
-//   computeLayoutState(): LayoutState {
-//     return this.provider.getLayoutState();
-//   }
-// }
-
-// interface InternalElementController extends LayoutStateProvider {
-//   depth: number;
-
-//   connect(): void;
-//   disconnect(): void;
-//   resize(): void;
-//   mutate(): void;
-// }
-
-// class DocumentElementInstance {
-//   #dummyElement: HTMLElement;
-//   #mutationObserver: MutationObserver;
-//   #resizeObserver: ResizeObserver;
-
-//   constructor() {
-//     this.#mutationObserver = new MutationObserver(
-//       this.#mutationObserverCallback
-//     );
-//     this.#mutationObserver.observe(documentElement, {
-//       childList: true,
-//       subtree: true,
-//       attributes: true,
-//       attributeOldValue: true,
-//     });
-
-//     this.#resizeObserver = new ResizeObserver(this.#resizeObserverCallback);
-//     this.#dummyElement = document.createElement(`cq-polyfill-${PER_RUN_UID}`);
-//     document.appendChild(this.#dummyElement);
-//   }
-
-//   #mutationObserverCallback(mutations: MutationRecord[]) {
-//     for (const entry of mutations) {
-//       if (
-//         entry.type === 'attributes' &&
-//         (entry.attributeName === DATA_ATTRIBUTE_NAME ||
-//           (entry.target instanceof Element &&
-//             entry.attributeName &&
-//             entry.target.getAttribute(entry.attributeName) === entry.oldValue))
-//       ) {
-//         continue;
-//       }
-
-//       for (const node of entry.removedNodes) {
-//         // We'll recurse into the children during disconnect.
-//         const controller = this.#getController(node);
-//         controller?.disconnect();
-//       }
-
-//       // We'll recurse into children during mutation.
-//       const controller = this.#getOrCreateController(entry.target);
-//       controller.mutate();
-//     }
-//   }
-
-//   #resizeObserverCallback(entries: ResizeObserverEntry[]) {
-//     entries
-//       .map(entry => [this.#getOrCreateController(entry.target), entry] as const)
-//       .sort((a, b) => a[0].depth - b[0].depth)
-//       .forEach(entry => entry[0].resize());
-//   }
-
-//   #getController(node: Node): InternalElementController | null {
-//     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-//     const controller = (node as any)[INSTANCE_SYMBOL];
-//     return controller ? controller : null;
-//   }
-
-//   #getOrCreateController(node: Node): InternalElementController {
-//     let controller = this.#getController(node);
-//     if (!controller) {
-//       let innerController: NodeController<Node>;
-//       let parentDepth = 0;
-
-//       if (node === document.documentElement) {
-//         innerController = new HtmlElementController(node);
-//       } else {
-//         const parentNode = node.parentNode;
-//         const parent = parentNode
-//           ? this.#getOrCreateController(parentNode)
-//           : null;
-
-//         if (!parent) {
-//           throw new Error('Expected a parent node');
-//         }
-
-//         parentDepth = parent.depth;
-//         const layoutStateProvider: LayoutStateProvider = {
-//           getLayoutState: parent.getLayoutState,
-//         };
-//         if (node === this.#dummyElement) {
-//           innerController = new DummyElementController(
-//             this.#dummyElement,
-//             layoutStateProvider
-//           );
-//         } else if (node instanceof HTMLLinkElement) {
-//           innerController = new LinkElementController(
-//             node,
-//             layoutStateProvider,
-//             {} as any
-//           );
-//         } else if (node instanceof HTMLStyleElement) {
-//           innerController = new StyleElementController(
-//             node,
-//             layoutStateProvider,
-//             {} as any
-//           );
-//         } else {
-//           innerController = new ChildNodeController(node, layoutStateProvider);
-//         }
-//       }
-
-//       // eslint-disable-next-line @typescript-eslint/no-this-alias
-//       const self = this;
-//       let cachedLayoutState: LayoutState | null = null;
-
-//       controller = {
-//         depth: parentDepth + 1,
-
-//         connect() {
-//           if (node instanceof Element) {
-//             self.#resizeObserver.observe(node);
-//           }
-//           innerController.connected();
-//         },
-
-//         disconnect() {
-//           if (node instanceof Element) {
-//             self.#resizeObserver.unobserve(node);
-//           }
-//           innerController.disconnected();
-//         },
-
-//         resize() {
-//           cachedLayoutState = innerController.computeLayoutState();
-//           innerController.resized();
-//         },
-
-//         mutate() {
-//           innerController.mutated();
-//         },
-
-//         getLayoutState() {
-//           if (!cachedLayoutState) {
-//             cachedLayoutState = innerController.computeLayoutState();
-//           }
-//           return cachedLayoutState;
-//         },
-//       };
-//     }
-//     return controller;
-//   }
-// }
-
-// class HtmlElementController extends NodeController<HTMLElement> {
-//   computeLayoutState(): LayoutState {
-//     throw new Error();
-//   }
-// }
-
-// class DummyElementController extends ChildNodeController<HTMLElement> {
-//   constructor(node: HTMLElement, parent: LayoutStateProvider) {
-//     super(node, parent);
-//   }
-
-//   resized(): void {
-//     // ...
-//   }
-// }
-
-// interface StyleSheetInstance {
-//   source: string;
-//   dispose(): void;
-// }
-
-// interface StyleController {
-//   register(source: string, url?: URL): StyleSheetInstance;
-// }
-
-// abstract class ControllerWithStyleController<
-//   T extends Node
-// > extends ChildNodeController<T> {
-//   controller: StyleController;
-
-//   constructor(
-//     node: T,
-//     parent: LayoutContextProvider,
-//     controller: StyleController
-//   ) {
-//     super(node, parent);
-//     this.controller = controller;
-//   }
-// }
-
-// class StyleElementController extends ControllerWithStyleController<HTMLStyleElement> {
-//   #styleSheet: StyleSheetInstance | null = null;
-
-//   connected(): void {
-//     const node = this.node;
-//     this.#styleSheet = this.controller.register(node.innerHTML);
-//     node.innerHTML = this.#styleSheet.source;
-//   }
-
-//   disconnected(): void {
-//     if (this.#styleSheet) {
-//       this.#styleSheet.dispose();
-//       this.#styleSheet = null;
-//     }
-//   }
-// }
-
-// class LinkElementController extends ControllerWithStyleController<HTMLLinkElement> {
-//   #isConnected = false;
-//   #styleSheet: StyleSheetInstance | null = null;
-
-//   connected(): void {
-//     this.#isConnected = true;
-//     const node = this.node;
-//     if (node.rel === 'stylesheet') {
-//       const srcUrl = new URL(node.href, document.baseURI);
-//       if (srcUrl.origin === location.origin) {
-//         fetch(srcUrl.toString())
-//           .then(r => r.text())
-//           .then(src => {
-//             if (this.#isConnected) {
-//               this.#styleSheet = this.controller.register(src, srcUrl);
-//               const blob = new Blob([this.#styleSheet.source], {
-//                 type: 'text/css',
-//               });
-//               node.href = URL.createObjectURL(blob);
-//             }
-//           });
-//       }
-//     }
-//   }
-
-//   disconnected(): void {
-//     this.#isConnected = false;
-
-//     if (this.#styleSheet) {
-//       this.#styleSheet.dispose();
-//       this.#styleSheet = null;
-//     }
-//   }
-// }
-
-let cachedQueryDescriptors: Iterable<QueryDescriptorArray> | null = null;
-function getQueryDescriptors() {
-  if (!cachedQueryDescriptors) {
-    const allQueryDescriptors = [];
-    for (const styleSheet of document.styleSheets) {
-      const ownerNode = styleSheet.ownerNode;
-      if (ownerNode instanceof Element) {
-        const queryDescriptors = ELEMENT_TO_DESCRIPTORS_MAP.get(ownerNode);
-        if (queryDescriptors) {
-          allQueryDescriptors.push(queryDescriptors);
-        }
+class NodeController<T extends Node> {
+  node: T;
+
+  constructor(node: T) {
+    this.node = node;
+  }
+
+  connected() {
+    // ...
+  }
+
+  disconnected() {
+    // ...
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  resized(layoutState: LayoutStateManager) {
+    // ...
+  }
+}
+
+class LinkElementController extends NodeController<HTMLLinkElement> {
+  #context: StyleSheetContext;
+  #isConnected = false;
+  #styleSheet: StyleSheetInstance | null = null;
+
+  constructor(node: HTMLLinkElement, context: StyleSheetContext) {
+    super(node);
+    this.#context = context;
+  }
+
+  connected(): void {
+    this.#isConnected = true;
+    const node = this.node;
+    if (node.rel === 'stylesheet') {
+      const srcUrl = new URL(node.href, document.baseURI);
+      if (srcUrl.origin === location.origin) {
+        fetch(srcUrl.toString())
+          .then(r => r.text())
+          .then(src => {
+            if (this.#isConnected) {
+              const styleSheet = (this.#styleSheet =
+                this.#context.registerStyleSheet(src, srcUrl));
+              const blob = new Blob([styleSheet.source], {
+                type: 'text/css',
+              });
+
+              const img = new Image();
+              img.onload = img.onerror = () => {
+                styleSheet.refresh();
+              };
+              img.src = node.href = URL.createObjectURL(blob);
+            }
+          });
       }
     }
-    cachedQueryDescriptors = allQueryDescriptors;
   }
-  return cachedQueryDescriptors;
+
+  disconnected(): void {
+    this.#isConnected = false;
+    if (this.#styleSheet) {
+      this.#styleSheet.dispose();
+      this.#styleSheet = null;
+    }
+  }
 }
 
-const RO = new ResizeObserver(entries => {
-  entries
-    .map(entry => {
-      const instance = ElementInstance.get(entry.target);
-      return instance ? ([instance, entry] as const) : null;
-    })
-    .filter(Boolean)
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    .sort((a, b) => a![0].depth - b![0].depth)
-    .forEach(instance => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      instance![0].resize(instance![1]);
+class StyleElementController extends NodeController<HTMLStyleElement> {
+  #context: StyleSheetContext;
+  #styleSheet: StyleSheetInstance | null = null;
+
+  constructor(node: HTMLStyleElement, context: StyleSheetContext) {
+    super(node);
+    this.#context = context;
+  }
+
+  connected(): void {
+    const node = this.node;
+    this.#styleSheet = this.#context.registerStyleSheet(node.innerHTML);
+    node.innerHTML = this.#styleSheet.source;
+  }
+
+  disconnected(): void {
+    if (this.#styleSheet) {
+      this.#styleSheet.dispose();
+      this.#styleSheet = null;
+    }
+  }
+}
+
+class GlobalStyleElementController extends NodeController<HTMLStyleElement> {
+  connected(): void {
+    this.node.innerHTML = `* { ${CUSTOM_PROPERTY_TYPE}: initial; ${CUSTOM_PROPERTY_NAME}: initial; }`;
+  }
+}
+
+class DummyElementController extends NodeController<HTMLElement> {
+  #context: ViewportChangeContext;
+
+  constructor(node: HTMLElement, context: ViewportChangeContext) {
+    super(node);
+    this.#context = context;
+  }
+
+  connected(): void {
+    this.node.style.cssText =
+      'position: fixed; top: 0; left: 0; visibility: hidden; ' +
+      (SUPPORTS_SMALL_VIEWPORT_UNITS
+        ? 'width: 1svw; height: 1svh;'
+        : 'width: 1%; height: 1%;');
+  }
+
+  resized(layoutState: LayoutStateManager): void {
+    const data = layoutState.getLayoutData();
+    this.#context.viewportChanged({
+      width: data.width,
+      height: data.height,
     });
-});
+  }
+}
 
-const MO = new MutationObserver(entries => {
-  cachedQueryDescriptors = null;
+class LayoutStateManager {
+  #styles: CSSStyleDeclaration;
+  #cachedState: LayoutState | null;
+  #cachedLayoutData: ParsedLayoutData | null;
+  #context: LayoutStateContext;
 
-  for (const entry of entries) {
-    if (
-      entry.type === 'attributes' &&
-      (entry.attributeName === DATA_ATTRIBUTE_NAME ||
-        (entry.target instanceof Element &&
-          entry.attributeName &&
-          entry.target.getAttribute(entry.attributeName) === entry.oldValue))
-    ) {
-      continue;
-    }
+  constructor(element: Element, context: LayoutStateContext) {
+    this.#styles = window.getComputedStyle(element);
+    this.#cachedState = null;
+    this.#cachedLayoutData = null;
+    this.#context = context;
+  }
 
-    for (const node of entry.removedNodes) {
-      // Note: We'll recurse into the children as part of disposal,
-      // if it's necessary.
-      const instance = ElementInstance.get(node);
-      if (instance) {
-        instance.disconnect();
+  invalidate(): void {
+    this.#cachedState = null;
+    this.#cachedLayoutData = null;
+  }
+
+  computeAttributesForElement(el: Element): string[] {
+    const conditions = this.get().conditions;
+    const attributes: string[] = [];
+
+    for (const query of this.#context.getQueryDescriptors()) {
+      const result = conditions[query.uid];
+      if (
+        query.selector != null &&
+        result != null &&
+        result.container &&
+        el.matches(query.selector)
+      ) {
+        attributes.push(query.uid);
       }
     }
 
-    // Note: We'll recurse into the children (including any new
-    // children) as part of the mutation, if it's necessary.
-    const instance = ElementInstance.getOrCreate(entry.target);
-    if (instance) {
-      instance.mutate();
-    }
+    return attributes;
   }
-});
-MO.observe(documentElement, {
-  childList: true,
-  subtree: true,
-  attributes: true,
-  attributeOldValue: true,
-});
 
-const documentInstance = ElementInstance.getOrCreate(documentElement);
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-documentInstance!.mutate();
+  getLayoutData(): ParsedLayoutData {
+    let data = this.#cachedLayoutData;
+    if (!data) {
+      const styles = this.#styles;
+      const isBorderBox =
+        styles.getPropertyValue('box-sizing') === 'border-box';
+
+      const getDimension = (property: string) =>
+        computeDimension(styles.getPropertyValue(property));
+      const sumProperties = (properties: string[]) =>
+        properties.reduce(
+          (current, property) => current + getDimension(property),
+          0
+        );
+
+      this.#cachedLayoutData = data = {
+        writingAxis: computeWritingAxis(
+          styles.getPropertyValue('writing-mode')
+        ),
+        fontSize: computeDimension(styles.getPropertyValue('font-size')),
+        width:
+          getDimension('width') -
+          (isBorderBox ? sumProperties(WIDTH_BORDER_BOX_PROPERTIES) : 0),
+        height:
+          getDimension('height') -
+          (isBorderBox ? sumProperties(HEIGHT_BORDER_BOX_PROPERTIES) : 0),
+      };
+    }
+    return data;
+  }
+
+  get(): LayoutState {
+    let state = this.#cachedState;
+    if (!state) {
+      const parentState = this.#context.getParentState();
+      const parentContext = parentState.context;
+      const parentConditions = parentState.conditions;
+      const styles = this.#styles;
+      const containerType = computeContainerType(
+        styles.getPropertyValue(CUSTOM_PROPERTY_TYPE)
+      );
+      const data = this.getLayoutData();
+
+      state = {
+        conditions: parentState.conditions,
+        context: {
+          ...parentContext,
+          fontSize: data.fontSize,
+          writingAxis: data.writingAxis,
+        },
+        isQueryContainer: false,
+      };
+
+      if (containerType !== ContainerType.Normal) {
+        const isValidContainer = computeValidContainer(
+          styles.getPropertyValue('display')
+        );
+
+        const sizeFeatures = computeSizeFeatures(containerType, data);
+        const queryContext = {
+          sizeFeatures,
+          treeContext: {
+            ...parentContext,
+            writingAxis: data.writingAxis,
+          },
+        };
+        const containerNames = computeContainerNames(
+          styles.getPropertyValue(CUSTOM_PROPERTY_NAME)
+        );
+
+        const computeQueryState = (
+          conditions: Record<string, QueryContainerState>,
+          query: ContainerQueryDescriptor
+        ) => {
+          let state = conditions[query.uid];
+          if (!state) {
+            let res = hasAllQueryNames(containerNames, query)
+              ? isValidContainer
+                ? evaluateContainerCondition(query.condition, queryContext)
+                : false
+              : null;
+
+            if (res == null) {
+              const parentResult = parentConditions[query.uid];
+              res = parentResult ? parentResult.condition : null;
+            }
+
+            conditions[query.uid] = state = {
+              condition: res,
+              container:
+                res === true &&
+                (query.parent
+                  ? computeQueryState(conditions, query.parent).condition ===
+                    true
+                  : true),
+            };
+          }
+
+          return state;
+        };
+
+        const conditions = {};
+        for (const query of this.#context.getQueryDescriptors()) {
+          computeQueryState(conditions, query);
+        }
+
+        state = {
+          conditions,
+          context: {
+            cqw:
+              sizeFeatures.width != null
+                ? sizeFeatures.width / 100
+                : parentContext.cqw,
+            cqh:
+              sizeFeatures.height != null
+                ? sizeFeatures.height / 100
+                : parentContext.cqh,
+            fontSize: data.fontSize,
+            rootFontSize: parentContext.rootFontSize,
+            writingAxis: data.writingAxis,
+          },
+          isQueryContainer: true,
+        };
+      }
+
+      this.#cachedState = state;
+    }
+    return state;
+  }
+}
+
+function computeSizeFeatures(type: ContainerType, data: ParsedLayoutData) {
+  type Axis = {value?: number};
+  const horizontalAxis: Axis = {
+    value: data.width,
+  };
+  const verticalAxis: Axis = {
+    value: data.height,
+  };
+
+  let inlineAxis = horizontalAxis;
+  let blockAxis = verticalAxis;
+
+  if (data.writingAxis === WritingAxis.Vertical) {
+    const tmp = inlineAxis;
+    inlineAxis = blockAxis;
+    blockAxis = tmp;
+  }
+
+  if (type !== ContainerType.Size) {
+    blockAxis.value = undefined;
+  }
+
+  return {
+    width: horizontalAxis.value,
+    height: verticalAxis.value,
+    inlineSize: inlineAxis.value,
+    blockSize: blockAxis.value,
+  };
+}
 
 function hasAllQueryNames(names: Set<string>, query: ContainerQueryDescriptor) {
   for (const name of query.names) {
@@ -1236,16 +801,6 @@ function computeContainerType(containerType: string) {
   return containerType.length === 0
     ? ContainerType.Normal
     : (parseInt(containerType) as ContainerType);
-}
-
-function computeInvalidContainer(displayType: string) {
-  const lowerDisplayType = displayType.toLowerCase();
-  return (
-    lowerDisplayType === 'none' ||
-    lowerDisplayType === 'contents' ||
-    lowerDisplayType.startsWith('table') ||
-    lowerDisplayType.startsWith('ruby')
-  );
 }
 
 function computeValidContainer(displayType: string) {
@@ -1278,147 +833,33 @@ function computeWritingAxis(writingMode: string) {
   }
 }
 
-function computePhysicalSize(
-  entry: ResizeObserverEntry,
-  styles: CSSStyleDeclaration
-): PhysicalSize {
-  if (entry.target instanceof SVGElement) {
-    return {
-      width: computeDimension(
-        styles.getPropertyValue(SUPPORTS_WRITING_MODE ? 'inline-size' : 'width')
-      ),
-      height: computeDimension(
-        styles.getPropertyValue(SUPPORTS_WRITING_MODE ? 'block-size' : 'height')
-      ),
+if (!('container' in document.documentElement.style)) {
+  initializePolyfill();
+
+  if (IS_WPT_BUILD) {
+    window.addEventListener('error', e => {
+      e.stopImmediatePropagation();
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).waitForPolyfill = function () {
+      return new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          });
+        });
+      });
+    };
+
+    const oldSupports = CSS.supports;
+    CSS.supports = (ident: string) => {
+      if (ident === 'container-type:size') {
+        return true;
+      }
+      return oldSupports(ident);
     };
   }
-  const contentRect = entry.contentRect;
-  return {width: contentRect.width, height: contentRect.height};
-}
-
-function computeSizeFeatures(
-  physicalSize: PhysicalSize,
-  containerType: ContainerType,
-  writingAxis: WritingAxis
-) {
-  type Axis = {value?: number};
-  const horizontalAxis: Axis = {value: physicalSize.width};
-  const verticalAxis: Axis = {value: physicalSize.height};
-
-  let inlineAxis = horizontalAxis;
-  let blockAxis = verticalAxis;
-
-  if (writingAxis === WritingAxis.Vertical) {
-    const tmp = inlineAxis;
-    inlineAxis = blockAxis;
-    blockAxis = tmp;
-  }
-
-  if (containerType !== ContainerType.Size) {
-    blockAxis.value = undefined;
-  }
-
-  return {
-    width: horizontalAxis.value,
-    height: verticalAxis.value,
-    inlineSize: inlineAxis.value,
-    blockSize: blockAxis.value,
-  };
-}
-
-function computeLayoutState(
-  styles: CSSStyleDeclaration,
-  context: LayoutContext,
-  entry: ResizeObserverEntry
-) {
-  const writingAxis = computeWritingAxis(
-    styles.getPropertyValue('writing-mode')
-  );
-  const containerType = computeContainerType(
-    styles.getPropertyValue(CUSTOM_PROPERTY_TYPE)
-  );
-  const parentConditions = context.conditions;
-  const parentQueryContext = context.queryContext;
-
-  let conditions = parentConditions;
-  let queryContext = {
-    ...parentQueryContext,
-    writingAxis,
-  };
-  if (containerType !== ContainerType.Normal) {
-    const isInvalidContainer = computeInvalidContainer(
-      styles.getPropertyValue('display')
-    );
-    if (!isInvalidContainer) {
-      const sizeFeatures = computeSizeFeatures(
-        computePhysicalSize(entry, styles),
-        containerType,
-        writingAxis
-      );
-
-      queryContext = {
-        writingAxis,
-        fontSize: computeDimension(styles.getPropertyValue('font-size')),
-        rootFontSize: computeDimension(
-          rootStyles.getPropertyValue('font-size')
-        ),
-        sizeFeatures,
-        cqw:
-          sizeFeatures.width != null
-            ? sizeFeatures.width
-            : parentQueryContext.cqw,
-        cqh:
-          sizeFeatures.height != null
-            ? sizeFeatures.height
-            : parentQueryContext.cqh,
-      };
-
-      const containerNames = computeContainerNames(
-        styles.getPropertyValue(CUSTOM_PROPERTY_NAME)
-      );
-
-      const computeQueryState = (
-        conditions: Record<string, QueryContainerState>,
-        query: ContainerQueryDescriptor
-      ) => {
-        let state = conditions[query.uid];
-        if (!state) {
-          let res = hasAllQueryNames(containerNames, query)
-            ? evaluateContainerCondition(query.condition, queryContext)
-            : null;
-
-          if (res == null) {
-            const parentResult = parentConditions[query.uid];
-            res = parentResult ? parentResult.condition : null;
-          }
-
-          conditions[query.uid] = state = {
-            condition: res,
-            container:
-              res === true &&
-              (query.parent
-                ? computeQueryState(conditions, query.parent).condition === true
-                : true),
-          };
-        }
-
-        return state;
-      };
-
-      conditions = {};
-      for (const queryDescriptors of getQueryDescriptors()) {
-        for (const query of queryDescriptors) {
-          computeQueryState(conditions, query);
-        }
-      }
-    }
-  }
-
-  return {
-    context: {
-      conditions,
-      queryContext,
-    },
-    parentQueryContext,
-  };
 }

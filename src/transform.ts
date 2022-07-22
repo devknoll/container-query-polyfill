@@ -37,6 +37,7 @@ import {
   DimensionToken,
   Node,
   NumberFlag,
+  parseComponentValue,
   parseDeclaration,
   parseStylesheet,
   QualifiedRuleNode,
@@ -61,6 +62,16 @@ export interface ContainerQueryDescriptor {
   parent: ContainerQueryDescriptor | null;
 }
 
+interface InvalidSelector {
+  actual: string;
+  expected: string;
+}
+
+interface ContainerContext {
+  parent: ContainerQueryDescriptor | null;
+  transformStyleRule: (rule: QualifiedRuleNode) => QualifiedRuleNode;
+}
+
 let CONTAINER_ID = 0;
 const CUSTOM_UNIT_MAP = {
   cqw: CUSTOM_UNIT_VARIABLE_CQW,
@@ -69,10 +80,11 @@ const CUSTOM_UNIT_MAP = {
   cqb: CUSTOM_UNIT_VARIABLE_CQB,
 };
 
-interface ContainerContext {
-  parent: ContainerQueryDescriptor | null;
-  transformStyleRule: (rule: QualifiedRuleNode) => QualifiedRuleNode;
-}
+const SUPPORTS_WHERE_PSEUDO_CLASS = CSS.supports('selector(:where())');
+const NO_WHERE_SELECTOR = ':not(.container-query-polyfill)';
+const NO_WHERE_SELECTOR_TOKENS = parseComponentValue(
+  Array.from(tokenize(NO_WHERE_SELECTOR))
+);
 
 export function transpileStyleSheet(
   sheetSrc: string,
@@ -84,11 +96,11 @@ export function transpileStyleSheet(
     node: RuleListBlock,
     context?: ContainerContext
   ): RuleListBlock {
-    const ctx = context
+    const ctx: ContainerContext = context
       ? context
       : {
           parent: null,
-          transformStyleRule: (rule: QualifiedRuleNode) => rule,
+          transformStyleRule: rule => rule,
         };
     return {
       ...node,
@@ -142,7 +154,8 @@ export function transpileStyleSheet(
 
   function transformSelector(
     nodes: Node[],
-    containerUID: string
+    containerUID: string,
+    invalidSelectorCallback: (invalidSelector: InvalidSelector) => void
   ): [Node[], Node[]] {
     const parser = createNodeParser(nodes);
     const elementSelector: Node[] = [];
@@ -169,38 +182,59 @@ export function transpileStyleSheet(
       const targetSelector =
         rawTargetSelector.length > 0
           ? trimTrailingWhitespace(rawTargetSelector)
-          : [
-              {
-                type: Type.DelimToken,
-                value: '*',
-              } as Node,
-            ];
+          : [delim('*')];
 
       // Consume pseudo part
       while (!isEndOfSelector(parser.at(1))) {
         parser.consume(1);
       }
 
-      elementSelector.push(...targetSelector);
-      styleSelector.push(...targetSelector);
-      styleSelector.push(
-        {type: Type.ColonToken},
-        func('where', [
-          {
-            type: Type.BlockNode,
-            source: {type: Type.LeftSquareBracketToken},
-            value: {
-              type: BlockType.SimpleBlock,
-              value: [
-                ident(DATA_ATTRIBUTE_NAME),
-                delim('~'),
-                delim('='),
-                {type: Type.StringToken, value: containerUID},
-              ],
-            },
+      if (IS_WPT_BUILD) {
+        if (!SUPPORTS_WHERE_PSEUDO_CLASS) {
+          targetSelector.push(...NO_WHERE_SELECTOR_TOKENS);
+        }
+      }
+
+      let targetSelectorForStyle = targetSelector;
+      let styleSelectorSuffix: Node[] = [
+        {
+          type: Type.BlockNode,
+          source: {type: Type.LeftSquareBracketToken},
+          value: {
+            type: BlockType.SimpleBlock,
+            value: [
+              ident(DATA_ATTRIBUTE_NAME),
+              delim('~'),
+              delim('='),
+              {type: Type.StringToken, value: containerUID},
+            ],
           },
-        ])
-      );
+        },
+      ];
+
+      if (!SUPPORTS_WHERE_PSEUDO_CLASS) {
+        const actual = targetSelector.map(serialize).join('');
+        if (!actual.endsWith(NO_WHERE_SELECTOR)) {
+          invalidSelectorCallback({
+            actual,
+            expected: actual + NO_WHERE_SELECTOR,
+          });
+        } else {
+          targetSelectorForStyle = parseComponentValue(
+            Array.from(
+              tokenize(
+                actual.substring(0, actual.length - NO_WHERE_SELECTOR.length)
+              )
+            )
+          );
+        }
+      } else {
+        styleSelectorSuffix = [delim(':'), func('where', styleSelectorSuffix)];
+      }
+
+      elementSelector.push(...targetSelector);
+      styleSelector.push(...targetSelectorForStyle);
+      styleSelector.push(...styleSelectorSuffix);
       styleSelector.push(
         ...nodes.slice(pseudoStartIndex, Math.max(0, parser.index + 1))
       );
@@ -344,6 +378,7 @@ export function transpileStyleSheet(
           uid: `c${CONTAINER_ID++}`,
         };
         const elementSelectors = new Set<string>();
+        const invalidSelectors: Array<InvalidSelector> = [];
         const transformedRules = transformStylesheet(
           parseStylesheet(node.value.value.value),
           {
@@ -351,8 +386,15 @@ export function transpileStyleSheet(
             transformStyleRule: rule => {
               const [elementSelector, styleSelector] = transformSelector(
                 rule.prelude,
-                descriptor.uid
+                descriptor.uid,
+                invalidSelector => {
+                  invalidSelectors.push(invalidSelector);
+                }
               );
+
+              if (invalidSelectors.length > 0) {
+                return rule;
+              }
 
               elementSelectors.add(elementSelector.map(serialize).join(''));
               return {
@@ -362,6 +404,38 @@ export function transpileStyleSheet(
             },
           }
         ).value;
+
+        if (invalidSelectors.length > 0) {
+          const selectors = new Set<string>();
+          const lines: Array<string> = [];
+
+          let largestLength = 0;
+          for (const {actual} of invalidSelectors) {
+            largestLength = Math.max(largestLength, actual.length);
+          }
+          const spaces = Array.from({length: largestLength}, () => ' ').join(
+            ''
+          );
+
+          for (const {actual, expected} of invalidSelectors) {
+            if (!selectors.has(actual)) {
+              lines.push(
+                `${actual}${spaces.substring(
+                  0,
+                  largestLength - actual.length
+                )} => ${expected}`
+              );
+              selectors.add(actual);
+            }
+          }
+
+          console.warn(
+            `The :where() pseudo-class is not supported by this browser. ` +
+              `To use the Container Query Polyfill, you must modify the ` +
+              `selectors under your @container rules:\n\n${lines.join('\n')}`
+          );
+          return node;
+        }
 
         if (elementSelectors.size > 0) {
           descriptor.selector = Array.from(elementSelectors).join(', ');

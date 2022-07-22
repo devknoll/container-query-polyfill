@@ -996,6 +996,26 @@ export function parseStylesheet(
   };
 }
 
+export function parseComponentValue(nodes: ReadonlyArray<Node>): Node[] {
+  const parser = createNodeParser(nodes);
+  const result: Node[] = [];
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const node = parser.consume(1);
+
+    switch (node.type) {
+      case Type.EOFToken:
+        return result;
+
+      default:
+        parser.reconsume();
+        result.push(consumeComponentValue(parser));
+        break;
+    }
+  }
+}
+
 function reinterpretQualifiedRule(
   node: QualifiedRuleNode,
   callback: (nodes: Node[]) => Block

@@ -64,17 +64,6 @@ function parseQueryCondition(
   let negated = false;
   let next: Node = parser.at(1);
 
-  if (
-    topLevel &&
-    next.type !== Type.FunctionNode &&
-    (next.type !== Type.BlockNode ||
-      next.source.type !== Type.LeftParenthesisToken)
-  ) {
-    // TODO: WPT currently assumes the top level of a condition
-    // is a function or enclosed in parens. Fix this when clarified.
-    return null;
-  }
-
   if (next.type === Type.IdentToken) {
     if (next.value.toLowerCase() !== 'not') {
       return null;
@@ -97,12 +86,6 @@ function parseQueryCondition(
 
   consumeWhitespace(parser);
   next = parser.at(1);
-
-  if (topLevel && next.type !== Type.EOFToken) {
-    // TODO: WPT currently assumes the top level of a condition
-    // is a function or enclosed in parens. Fix this when clarified.
-    return null;
-  }
 
   const nextAndOr =
     next.type === Type.IdentToken ? next.value.toLowerCase() : null;
@@ -133,6 +116,7 @@ function parseQueryCondition(
     } as GenericExpressionNode;
   }
 
+  consumeWhitespace(parser);
   return parser.at(1).type === Type.EOFToken ? left : null;
 }
 

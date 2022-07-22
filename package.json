@@ -5,6 +5,14 @@
   "type": "module",
   "main": "dist/src/cqfill.js",
   "module": "dist/src/cqfill.js",
+  "publishConfig": {
+    "source": "src/engine.ts"
+  },
+  "exports": {
+    ".": {
+      "browser": "./dist/src/cqfill.modern.js"
+    }
+  },
   "files": [
     "README.md",
     "LICENSE",
@@ -13,14 +21,12 @@
   ],
   "scripts": {
     "build:clean": "rimraf ./dist/",
-    "build:iife:minified": "esbuild --bundle ./dist/src/cqfill.js --outfile=./dist/src/cqfill.iife.min.js --format=iife",
-    "build:esm:minified": "esbuild --bundle ./dist/src/cqfill.js --outfile=./dist/src/cqfill.min.js --format=esm",
-    "build:tsc": "tsc",
-    "build": "npm run build:tsc && npm run build:esm:minified && npm run build:iife:minified",
+    "build:wpt": "microbundle --no-compress --define IS_WPT_BUILD=1",
+    "build": "microbundle --define IS_WPT_BUILD=0",
     "lint": "eslint '**/*.ts'",
     "prettier:fix": "prettier --write .",
     "serve": "superstatic -p 9606 .",
-    "test": "node ./dist/tests/wpt.js"
+    "test": "node --loader ts-node/esm ./tests/wpt.ts"
   },
   "author": "Google Chrome Developers <chromium-dev@google.com>",
   "contributors": [
@@ -36,10 +42,12 @@
     "browserstack-local": "^1.5.1",
     "esbuild": "^0.14.31",
     "eslint": "^8.12.0",
+    "microbundle": "^0.15.0",
+    "node-fetch": "^3.2.9",
     "prettier": "^2.6.2",
     "rimraf": "^3.0.2",
     "selenium-webdriver": "^4.3.0",
     "superstatic": "^8.0.0",
-    "typescript": "^4.6.3"
+    "ts-node": "^10.9.1"
   }
 }
