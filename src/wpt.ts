@@ -22,7 +22,9 @@ export function initializeForWPT() {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            resolve();
+            requestAnimationFrame(() => {
+              resolve();
+            });
           });
         });
       });
