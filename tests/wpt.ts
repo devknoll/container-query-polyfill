@@ -175,7 +175,7 @@ const SAFARI_MACOS_DEFINITION: BrowserDefinition = {
 const EDGE_DEFINITION: BrowserDefinition = {
   name: 'Edge',
   logo: 'https://unpkg.com/@browser-logos/edge@2.0.5/edge.svg',
-  versions: Array.from({length: 104 - 104/*80*/})
+  versions: Array.from({length: 104 - 104 /*80*/})
     .map((_, i) => 80 + i)
     .filter(version => ![82].includes(version))
     .map(version => `${version}.0`)
@@ -198,7 +198,7 @@ const EDGE_DEFINITION: BrowserDefinition = {
 const FIREFOX_DEFINITION: BrowserDefinition = {
   name: 'Firefox',
   logo: 'https://unpkg.com/@browser-logos/firefox@3.0.9/firefox.svg',
-  versions: Array.from({length: 103 - 103/*69*/})
+  versions: Array.from({length: 103 - 103 /*69*/})
     .map((_, i) => 69 + i)
     .map(version => `${version}.0`)
     .map(browserVersion => ({
@@ -412,12 +412,13 @@ async function main() {
           const failed: TestDescriptor[] = [];
 
           for (const test of results) {
+            const testURL = new URL(test[0]);
             if (Array.isArray(test) && Array.isArray(test[1].tests)) {
               for (const subtest of test[1].tests) {
                 if (SUBTEST_FILTERS.some(filter => filter.test(subtest.name))) {
                   continue;
                 }
-                const result = {test: test[0], subtest: subtest.name};
+                const result = {test: testURL.pathname, subtest: subtest.name};
                 const destination =
                   subtest.status === subtest.PASS ? passed : failed;
 
@@ -445,7 +446,10 @@ async function main() {
   }
 
   interface SubtestMap {
-    [key: string]: string[];
+    [key: string]: {
+      passed: string[];
+      failed: string[];
+    };
   }
 
   function getTargetResultBucket(
@@ -454,8 +458,9 @@ async function main() {
   ) {
     const testToSubtest = (testToSubtestMap[descriptor.test] =
       testToSubtestMap[descriptor.test] || {});
-    const subtestToBucket = (testToSubtest[descriptor.subtest] =
-      testToSubtest[descriptor.subtest] || []);
+    const subtestToBucket = (testToSubtest[descriptor.subtest] = testToSubtest[
+      descriptor.subtest
+    ] || {passed: [], failed: []});
 
     testToSubtestMap[descriptor.test] = testToSubtest;
     testToSubtest[descriptor.subtest] = subtestToBucket;
@@ -472,12 +477,12 @@ async function main() {
 
         for (const result of passed) {
           const bucket = getTargetResultBucket(testToSubtests, result);
-          bucket.push(name);
+          bucket.passed.push(name);
         }
 
         for (const result of failed) {
           const bucket = getTargetResultBucket(testToSubtests, result);
-          bucket.push(name);
+          bucket.failed.push(name);
         }
       }
     }
