@@ -24,9 +24,14 @@ const enum DataType {
   Result,
 }
 
+interface TestDescriptor {
+  test: string;
+  subtest: string;
+}
+
 interface ResultData {
   type: DataType.Result;
-  result: [number, number];
+  result: [TestDescriptor[], TestDescriptor[]];
 }
 
 interface FetchDescriptorData {
@@ -92,7 +97,7 @@ const SUBTEST_FILTERS: Array<RegExp> = [
 const CHROME_DEFINITION: BrowserDefinition = {
   name: 'Chrome',
   logo: 'https://unpkg.com/@browser-logos/chrome@2.0.0/chrome.svg',
-  versions: Array.from({length: 104 - 79})
+  versions: Array.from({length: 104 - 102 /*79*/})
     .map((_, i) => 79 + i)
     .filter(version => ![82].includes(version))
     .map(version => `${version}.0`)
@@ -117,14 +122,14 @@ const SAFARI_IOS_DEFINITION: BrowserDefinition = {
   logo: 'https://unpkg.com/@browser-logos/safari-ios@1.0.15/safari-ios.svg',
   versions: (
     [
-      ['13.7', '13.7'],
-      ['14.0', '14'],
-      ['14.1', '14'],
-      ['15.0', '15'],
-      ['15.2', '15'],
-      ['15.4', '15'],
-      ['15.5', '15'],
-      ['15.6', '15'],
+      // ['13.7', '13.7'],
+      // ['14.0', '14'],
+      // ['14.1', '14'],
+      // ['15.0', '15'],
+      // ['15.2', '15'],
+      // ['15.4', '15'],
+      // ['15.5', '15'],
+      // ['15.6', '15'],
     ] as Array<[string, string]>
   ).map(([browserVersion, osVersion]) => ({
     name: browserVersion,
@@ -147,9 +152,9 @@ const SAFARI_MACOS_DEFINITION: BrowserDefinition = {
   logo: 'https://unpkg.com/@browser-logos/safari-ios@1.0.15/safari-ios.svg',
   versions: (
     [
-      ['13.1', 'Catalina'],
-      ['14.1', 'Big Sur'],
-      ['15.3', 'Monterey'],
+      // ['13.1', 'Catalina'],
+      // ['14.1', 'Big Sur'],
+      // ['15.3', 'Monterey'],
     ] as Array<[string, string]>
   ).map(([browserVersion, osVersion]) => ({
     name: browserVersion,
@@ -170,7 +175,7 @@ const SAFARI_MACOS_DEFINITION: BrowserDefinition = {
 const EDGE_DEFINITION: BrowserDefinition = {
   name: 'Edge',
   logo: 'https://unpkg.com/@browser-logos/edge@2.0.5/edge.svg',
-  versions: Array.from({length: 104 - 80})
+  versions: Array.from({length: 104 - 104/*80*/})
     .map((_, i) => 80 + i)
     .filter(version => ![82].includes(version))
     .map(version => `${version}.0`)
@@ -193,7 +198,7 @@ const EDGE_DEFINITION: BrowserDefinition = {
 const FIREFOX_DEFINITION: BrowserDefinition = {
   name: 'Firefox',
   logo: 'https://unpkg.com/@browser-logos/firefox@3.0.9/firefox.svg',
-  versions: Array.from({length: 103 - 69})
+  versions: Array.from({length: 103 - 103/*69*/})
     .map((_, i) => 69 + i)
     .map(version => `${version}.0`)
     .map(browserVersion => ({
@@ -212,52 +217,12 @@ const FIREFOX_DEFINITION: BrowserDefinition = {
     })),
 };
 
-const SAMSUNG_INTERNET_DEFINITION: BrowserDefinition = {
-  name: 'Samsung Internet',
-  logo: 'https://unpkg.com/@browser-logos/samsung-internet@4.0.6/samsung-internet.svg',
-  versions: [
-    '9.2',
-    '10.1',
-    '11.2',
-    '12.0',
-    '13.0',
-    '14.0',
-    '15.0',
-    '16.0',
-    '17.0',
-  ].map(browserVersion => ({
-    name: browserVersion,
-    data: {
-      type: DataType.FetchDescriptor,
-      capabilities: {
-        'bstack:options': {
-          osVersion: '12.0',
-          deviceName: 'Samsung Galaxy S22 Ultra',
-        },
-        browserName: 'samsung',
-        browserVersion,
-      },
-    },
-  })),
-};
-
-const IE_DEFINITION: BrowserDefinition = {
-  name: 'Internet Explorer',
-  logo: 'https://unpkg.com/@browser-logos/internet-explorer_9-11@1.1.16/internet-explorer_9-11.svg',
-  versions: ['9', '10', '11'].map(browserVersion => ({
-    name: browserVersion,
-    data: {type: DataType.Result, result: [0, 0]},
-  })),
-};
-
 const BROWSERS: BrowserDefinition[] = [
   CHROME_DEFINITION,
   SAFARI_IOS_DEFINITION,
   SAFARI_MACOS_DEFINITION,
   EDGE_DEFINITION,
   FIREFOX_DEFINITION,
-  SAMSUNG_INTERNET_DEFINITION,
-  IE_DEFINITION,
 ];
 
 interface Subtest {
@@ -419,8 +384,6 @@ async function main() {
   }
 
   const testSuite = await getTests(manifestPath);
-  console.info(`Using tests: ${JSON.stringify(testSuite, null, 4)}`);
-
   const tests: Array<() => Promise<void>> = [];
   const results: BrowserDefinition[] = BROWSERS.map(browser => ({
     ...browser,
@@ -445,8 +408,8 @@ async function main() {
             () => []
           );
 
-          let passed = 0;
-          let failed = 0;
+          const passed: TestDescriptor[] = [];
+          const failed: TestDescriptor[] = [];
 
           for (const test of results) {
             if (Array.isArray(test) && Array.isArray(test[1].tests)) {
@@ -454,11 +417,11 @@ async function main() {
                 if (SUBTEST_FILTERS.some(filter => filter.test(subtest.name))) {
                   continue;
                 }
-                if (subtest.status === subtest.PASS) {
-                  passed++;
-                } else if (subtest.status !== subtest.PRECONDITION_FAILED) {
-                  failed++;
-                }
+                const result = {test: test[0], subtest: subtest.name};
+                const destination =
+                  subtest.status === subtest.PASS ? passed : failed;
+
+                destination.push(result);
               }
             }
           }
@@ -473,10 +436,54 @@ async function main() {
   const server = await createLocalServer();
   try {
     await eachLimit(tests, 5, async test => await test());
-    console.log(JSON.stringify(results, null, 2));
   } finally {
     await stopLocalServer(server);
   }
+
+  interface TestToSubtestMap {
+    [key: string]: SubtestMap;
+  }
+
+  interface SubtestMap {
+    [key: string]: string[];
+  }
+
+  function getTargetResultBucket(
+    testToSubtestMap: TestToSubtestMap,
+    descriptor: TestDescriptor
+  ) {
+    const testToSubtest = (testToSubtestMap[descriptor.test] =
+      testToSubtestMap[descriptor.test] || {});
+    const subtestToBucket = (testToSubtest[descriptor.subtest] =
+      testToSubtest[descriptor.subtest] || []);
+
+    testToSubtestMap[descriptor.test] = testToSubtest;
+    testToSubtest[descriptor.subtest] = subtestToBucket;
+
+    return subtestToBucket;
+  }
+
+  const testToSubtests: TestToSubtestMap = {};
+  for (const browser of results) {
+    for (const version of browser.versions) {
+      if (version.data.type === DataType.Result) {
+        const [passed, failed] = version.data.result;
+        const name = `${browser.name} ${version.name}`;
+
+        for (const result of passed) {
+          const bucket = getTargetResultBucket(testToSubtests, result);
+          bucket.push(name);
+        }
+
+        for (const result of failed) {
+          const bucket = getTargetResultBucket(testToSubtests, result);
+          bucket.push(name);
+        }
+      }
+    }
+  }
+
+  console.info(JSON.stringify(testToSubtests), null, 2);
 }
 
 try {
