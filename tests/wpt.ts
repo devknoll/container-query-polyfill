@@ -12,10 +12,12 @@
  */
 
 import {eachLimit, retry} from 'async';
-import {readFile} from 'fs/promises';
+import {readFile, writeFile} from 'fs/promises';
+import {dirname, join} from 'path';
 import {Agent} from 'http';
 import {Builder, By, until} from 'selenium-webdriver';
 import {Local} from 'browserstack-local';
+import {fileURLToPath} from 'url';
 
 type Capabilities = Record<string, unknown>;
 
@@ -441,54 +443,12 @@ async function main() {
     await stopLocalServer(server);
   }
 
-  interface TestToSubtestMap {
-    [key: string]: SubtestMap;
-  }
-
-  interface SubtestMap {
-    [key: string]: {
-      passed: string[];
-      failed: string[];
-    };
-  }
-
-  function getTargetResultBucket(
-    testToSubtestMap: TestToSubtestMap,
-    descriptor: TestDescriptor
-  ) {
-    const testToSubtest = (testToSubtestMap[descriptor.test] =
-      testToSubtestMap[descriptor.test] || {});
-    const subtestToBucket = (testToSubtest[descriptor.subtest] = testToSubtest[
-      descriptor.subtest
-    ] || {passed: [], failed: []});
-
-    testToSubtestMap[descriptor.test] = testToSubtest;
-    testToSubtest[descriptor.subtest] = subtestToBucket;
-
-    return subtestToBucket;
-  }
-
-  const testToSubtests: TestToSubtestMap = {};
-  for (const browser of results) {
-    for (const version of browser.versions) {
-      if (version.data.type === DataType.Result) {
-        const [passed, failed] = version.data.result;
-        const name = `${browser.name} ${version.name}`;
-
-        for (const result of passed) {
-          const bucket = getTargetResultBucket(testToSubtests, result);
-          bucket.passed.push(name);
-        }
-
-        for (const result of failed) {
-          const bucket = getTargetResultBucket(testToSubtests, result);
-          bucket.failed.push(name);
-        }
-      }
-    }
-  }
-
-  console.info(JSON.stringify(testToSubtests), null, 2);
+  const output = JSON.stringify(results, null, 2);
+  await writeFile(
+    join(dirname(fileURLToPath(import.meta.url)), 'results.json'),
+    output
+  );
+  console.warn(output);
 }
 
 try {
