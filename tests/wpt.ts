@@ -21,32 +21,34 @@ import {fileURLToPath} from 'url';
 
 type Capabilities = Record<string, unknown>;
 
-const enum DataType {
+export const enum DataType {
   FetchDescriptor,
   Result,
 }
 
-interface TestDescriptor {
+export interface TestDescriptor {
   test: string;
   subtest: string;
 }
 
-interface ResultData {
+export type TestResultData = [TestDescriptor[], TestDescriptor[]];
+
+export interface ResultData {
   type: DataType.Result;
-  result: [TestDescriptor[], TestDescriptor[]];
+  result: TestResultData;
 }
 
-interface FetchDescriptorData {
+export interface FetchDescriptorData {
   type: DataType.FetchDescriptor;
   capabilities: Capabilities;
 }
 
-interface BrowserVersion {
+export interface BrowserVersion {
   name: string;
   data: FetchDescriptorData | ResultData;
 }
 
-interface BrowserDefinition {
+export interface BrowserDefinition {
   name: string;
   logo: string;
   versions: BrowserVersion[];
@@ -399,7 +401,7 @@ async function main() {
           const results = await tryOrDefault(
             async () =>
               await retry(
-                5,
+                10,
                 async () =>
                   await runTestSuite(
                     `${browser.name} ${version.name}`,

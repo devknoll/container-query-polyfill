@@ -11,37 +11,49 @@
  * limitations under the License.
  */
 
-import {readFile} from 'fs/promises';
+import {readFile, writeFile} from 'fs/promises';
 import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
+import {
+  BrowserDefinition,
+  DataType,
+  TestDescriptor,
+  TestResultData,
+} from './wpt';
 
-interface TestMap<T> {
-  [key: string]: SubtestMap<T> | undefined;
+interface TestMap {
+  [key: string]: SubtestMap | undefined;
 }
 
-interface SubtestMap<T> {
-  [key: string]: T | undefined;
+interface SubtestMap {
+  [key: string]: BrowserResults | undefined;
+}
+
+interface BrowserMap {
+  [name: string]: BrowserVersionMap;
+}
+
+interface BrowserVersionMap {
+  [version: string]: TestResultData;
 }
 
 interface BrowserResults {
-  passed: string[];
-  failed: string[];
+  passing: BrowserVersion[];
+  failing: BrowserVersion[];
 }
 
-interface Diff<T> {
-  before?: T;
-  after?: T;
-}
+type BrowserVersion = [string, string];
 
-function getTargetForDescriptor<T>(
-  testMap: TestMap<T>,
+function getTargetForDescriptor(
+  testMap: TestMap,
   descriptor: TestDescriptor,
-  defaultValue: () => T
+  createIfNeeded: boolean
 ) {
   const testToSubtest = (testMap[descriptor.test] =
     testMap[descriptor.test] || {});
   const subtestToTarget = (testToSubtest[descriptor.subtest] =
-    testToSubtest[descriptor.subtest] || defaultValue());
+    testToSubtest[descriptor.subtest] ||
+    (createIfNeeded ? {passing: [], failing: []} : undefined));
 
   testMap[descriptor.test] = testToSubtest;
   testToSubtest[descriptor.subtest] = subtestToTarget;
@@ -49,61 +61,253 @@ function getTargetForDescriptor<T>(
   return subtestToTarget;
 }
 
-const newTestMap: TestMap<BrowserResults> = {};
-for (const browser of results) {
-  for (const version of browser.versions) {
-    if (version.data.type === DataType.Result) {
-      const [passed, failed] = version.data.result;
-      const name = `${browser.name} ${version.name}`;
+function getPathForFile(filename: string) {
+  return join(dirname(fileURLToPath(import.meta.url)), filename);
+}
 
-      for (const result of passed) {
-        const target = getTargetForDescriptor(newTestMap, result, () => ({
-          passed: [],
-          failed: [],
-        }));
-        target.passed.push(name);
+async function loadJSON<T>(filename: string): Promise<T> {
+  return JSON.parse(
+    (await readFile(getPathForFile(filename))).toString('utf-8')
+  ) as T;
+}
+
+function createBrowserMapFromTestMap(testMap: TestMap) {
+  const browserMap: BrowserMap = {};
+  function addResult(
+    test: TestDescriptor,
+    browser: BrowserVersion,
+    passing: boolean
+  ) {
+    const [name, version] = browser;
+    const versionMap = (browserMap[name] = browserMap[name] || {});
+    const results = (versionMap[version] = versionMap[version] || [[], []]);
+
+    if (passing) {
+      results[0].push(test);
+    } else {
+      results[1].push(test);
+    }
+  }
+
+  for (const testName in testMap) {
+    const test = testMap[testName];
+    for (const subtestName in test) {
+      const subtest = test[subtestName];
+      if (!subtest) {
+        continue;
       }
 
-      for (const result of failed) {
-        const target = getTargetForDescriptor(newTestMap, result, () => ({
-          passed: [],
-          failed: [],
-        }));
-        target.failed.push(name);
+      const descriptor = {test: testName, subtest: subtestName};
+      for (const browser of subtest.passing) {
+        addResult(descriptor, browser, true);
+      }
+
+      for (const browser of subtest.failing) {
+        addResult(descriptor, browser, false);
       }
     }
   }
+
+  return browserMap;
 }
 
-const baselineBuffer = await readFile(
-  join(dirname(fileURLToPath(import.meta.url)), 'baseline.json')
-);
-const baselineTestMap: TestMap<BrowserResults> = JSON.parse(
-  baselineBuffer.toString('utf-8')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-) as any;
+function createBrowserMapFromResults(results: BrowserDefinition[]): BrowserMap {
+  const browserMap: BrowserMap = {};
+  for (const browserDefinition of results) {
+    const browser: BrowserVersionMap = {};
+    browserMap[browserDefinition.name] = browser;
 
-const deltaTestMap: TestMap<Diff<BrowserResults>> = {};
+    for (const versionDefinition of browserDefinition.versions) {
+      if (versionDefinition.data.type === DataType.Result) {
+        browser[versionDefinition.name] = versionDefinition.data.result;
+      }
+    }
+  }
+  return browserMap;
+}
+
+function createTestMapFromBrowserMap(browserMap: BrowserMap): TestMap {
+  const testMap: TestMap = {};
+  for (const browser in browserMap) {
+    for (const version in browserMap[browser]) {
+      const [passed, failed] = browserMap[browser][version];
+
+      for (const result of passed) {
+        const target = getTargetForDescriptor(testMap, result, true);
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        target!.passing.push([browser, version]);
+      }
+
+      for (const result of failed) {
+        const target = getTargetForDescriptor(testMap, result, true);
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        target!.failing.push([browser, version]);
+      }
+    }
+  }
+
+  return testMap;
+}
+
+function getBrowserName(browser: string, version: string) {
+  return `${browser} ${version}`;
+}
+
+function mergeBrowserMaps(lhs: BrowserMap, rhs: BrowserMap): Set<string> {
+  const missingBrowsers: Set<string> = new Set();
+  for (const browserName in lhs) {
+    const rightBrowser = rhs[browserName] || {};
+    rhs[browserName] = rightBrowser;
+
+    for (const versionName in lhs[browserName]) {
+      const rightData = rhs[browserName][versionName];
+      const leftData = lhs[browserName][versionName];
+
+      if (!rightData && leftData) {
+        rhs[browserName][versionName] = leftData;
+        missingBrowsers.add(getBrowserName(browserName, versionName));
+      }
+    }
+  }
+
+  return missingBrowsers;
+}
+
+const previousTestMap = await loadJSON<TestMap>('baseline.json');
+const previousResults = createBrowserMapFromTestMap(previousTestMap);
+
+const currentResults = createBrowserMapFromResults(
+  await loadJSON('results.json')
+);
+const missingBrowsers = mergeBrowserMaps(previousResults, currentResults);
+const currentTestMap = createTestMapFromBrowserMap(currentResults);
+
 const allTestNames = new Set(
-  [...Object.keys(baselineTestMap), ...Object.keys(newTestMap)].sort()
+  [...Object.keys(previousTestMap), ...Object.keys(currentTestMap)].sort()
 );
+const summaryLines: string[] = [];
 
-for (const test in allTestNames) {
-  const newSubtests = newTestMap[test] ?? {};
-  const baselineSubtests = baselineTestMap[test] ?? {};
+for (const test of allTestNames) {
+  const currentSubtests = currentTestMap[test];
+  const previousSubtests = previousTestMap[test];
   const allSubtestNames = new Set(
-    [...Object.keys(newSubtests), ...Object.keys(baselineSubtests)].sort()
+    [
+      ...(currentSubtests ? Object.keys(currentSubtests) : []),
+      ...(previousSubtests ? Object.keys(previousSubtests) : []),
+    ].sort()
   );
+  const testSummary: string[] = [];
 
-  for (const subtest in allSubtestNames) {
-    const target = getTargetForDescriptor<Diff<BrowserResults>>(
-      deltaTestMap,
-      {test, subtest},
-      () => ({})
-    );
-    target.before = baselineSubtests[subtest];
-    target.after = newSubtests[subtest];
+  if (!currentSubtests) {
+    summaryLines.push('This test was removed.');
+  } else {
+    const subtestSummary: string[] = [];
+
+    for (const subtest of allSubtestNames) {
+      const descriptor = {test, subtest};
+      const before = getTargetForDescriptor(previousTestMap, descriptor, false);
+      const after = getTargetForDescriptor(currentTestMap, descriptor, false);
+
+      const passingBefore = new Set(
+        (before?.passing || []).map(browser =>
+          getBrowserName(browser[0], browser[1])
+        )
+      );
+      const passingAfter = new Set(
+        (after?.passing || []).map(browser =>
+          getBrowserName(browser[0], browser[1])
+        )
+      );
+      const allBrowsers = new Set(
+        [...passingBefore.keys(), ...passingAfter.keys()].sort()
+      );
+      let summary: string | null = null;
+
+      if (!after) {
+        summary = '(Removed)';
+      } else {
+        const diffLines: string[] = [];
+        for (const browser of allBrowsers) {
+          const isPassing = passingAfter.has(browser);
+          const wasPassing = passingBefore.has(browser);
+
+          if (isPassing === wasPassing) {
+            continue;
+          }
+
+          const prefix = isPassing ? '+' : '-';
+          diffLines.push(`${prefix} ${browser}`);
+        }
+
+        if (diffLines.length > 0) {
+          summary = `
+\`\`\`diff
+${diffLines.join('\n')}
+\`\`\`
+                `;
+        }
+      }
+
+      if (summary) {
+        subtestSummary.push(`
+<tr>
+<td><pre>${subtest}</pre></td>
+<td>
+
+${summary}
+
+</td>
+</tr>
+            `);
+      }
+    }
+
+    if (subtestSummary.length > 0) {
+      testSummary.push(`
+${subtestSummary.join('\n')}
+        `);
+    }
+  }
+
+  if (testSummary.length > 0) {
+    summaryLines.push(`
+<table>
+<tr>
+<th colspan=3>${test}</th>
+</tr>
+
+${testSummary.join('\n')}
+</table>
+    `);
   }
 }
 
-console.info(JSON.stringify(deltaTestMap, null, 2));
+if (summaryLines.length > 0) {
+  const commentLines: string[] = [];
+  commentLines.push(
+    'The [Web Platform Test](https://web-platform-tests.org/) results have changed from the expected baseline. The baseline may be updated by merging this pull request.'
+  );
+
+  if (missingBrowsers.size > 0) {
+    commentLines.push(
+      '',
+      `
+  > **Warning**
+  > The test run was missing data for the following browsers:
+  >
+  ${Array.from(missingBrowsers)
+    .map(browser => `>   * ${browser}`)
+    .join('\n')}
+  >
+  > Therefore I couldn't confirm the expected tests are still passing.
+      `
+    );
+  }
+
+  commentLines.push('', '# Test Results', ...summaryLines);
+  await writeFile(getPathForFile('pr.txt'), commentLines.join('\n'));
+  await writeFile(
+    getPathForFile('baseline.json'),
+    JSON.stringify(currentTestMap)
+  );
+}

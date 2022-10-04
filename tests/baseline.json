@@ -1,1 +1,2198 @@
-{}
+{
+  "/css/css-contain/container-queries/aspect-ratio-feature-evaluation.html": {
+    "@container queries with aspect-ratio and size containment": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "@container query with aspect-ratio change after resize": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/backdrop-invalidation.html": {
+    "Pseudo-element ::backdrop responds to container size changes": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/canvas-as-container-005.html": {
+    "Focusable after container size change": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Initially display:none, not focusable": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/canvas-as-container-006.html": {
+    "Focusable after container size change": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Initially display:none, not focusable": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/column-spanner-in-container.html": {
+    "#spanner matching container with column-width 300px, getting column-span:all": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Reducing #multicol width means #spanner no longer gets column-span:all": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Back to matching 300px and column-span:all": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/conditional-container-status.html": {
+    "Conditionally applying container-type:initial": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-inner-at-rules.html": {
+    "@keyframes is defined regardless of evaluation": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "@font-face is defined regardless of evaluation": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "@media works inside @container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "@supports works inside @container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "@property is defined regardless of evaluation": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "@layer order respected regardless of evaluation": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/container-nested.html": {
+    "Implicit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Implicit, outer failing": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Implicit, inner failing": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Outer named, inner named": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Outer named, inner named (reverse)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Failing outer name": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Failing inner name": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Outer named, inner implicit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Inner named, outer implicit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Inner named, outer implicit (reverse)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Three levels": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Three levels, middle fail": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Named inner invalidation": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Implicit outer invalidation": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-selection.html": {
+    "(width: 16px) for .size > .inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height: 16px) for .inline > .size > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(width: 16px) for .inline > .size > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height: 32px) for .size > .inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height: 16px) for .size > .inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (width: 32px) for .a-size > .b-size > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "b (width: 16px) for .a-size > .b-size > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "c (width) for .a-size > .b-size > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (width: 16px) for .a-size > .a-size > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (width: 32px) for .a-size > .a > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "b (width: 32px) for .ab-size > .size > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "c (width) for .ab-size > .size > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (width: 8px) for .a-size > .b-size > .a-inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "b (width: 16px) for .a-size > .b-size > .a-inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (height: 32px) for .a-size > .b-size > .a-inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (height) for .a-inline > .b-size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (inline-size: 8px) for .a-size > .b-size > .a-inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "b (inline-size: 16px) for .a-size > .b-size > .a-inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (block-size: 32px) for .a-size > .b-size > .a-inline > span": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (block-size) for .a-inline > .b-size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "a (width: 32px) for .ab-size > .size > span": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/container-size-invalidation-after-load.html": {
+    "@container: invalidation of container size after load event": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-size-invalidation.html": {
+    "Children respond to changes in container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Descendants respond to changes in container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-size-nested-invalidation.html": {
+    "Queries that skip a container are invalidated correctly": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-type-invalidation.html": {
+    "Changing the container type invalidates relevant descendants": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-units-animation.html": {
+    "Animation using cqw unit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqw unit responds to changing container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqh unit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqh unit responds to changing container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqi unit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqi unit responds to changing container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqb unit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqb unit responds to changing container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqmin unit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqmin unit responds to changing container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqmax unit": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Animation using cqmax unit responds to changing container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-units-computational-independence.html": {
+    "Container relative unit cqw is not computationally independent": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Container relative unit cqh is not computationally independent": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Container relative unit cqi is not computationally independent": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Container relative unit cqb is not computationally independent": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Container relative unit cqmin is not computationally independent": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Container relative unit cqmax is not computationally independent": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-units-in-at-container-dynamic.html": {
+    "Query with container-relative units are responsive to changes": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/container-units-in-at-container.html": {
+    "cqw unit resolves against appropriate container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqh unit resolves against appropriate container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqi unit resolves against appropriate container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqb unit resolves against appropriate container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqmin unit resolves against appropriate container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqmax unit resolves against appropriate container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqw unit resolves against appropriate container (vertical writing-mode on subject)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqh unit resolves against appropriate container (vertical writing-mode on subject)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqi unit resolves against appropriate container (vertical writing-mode on subject)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqb unit resolves against appropriate container (vertical writing-mode on subject)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqmin unit resolves against appropriate container (vertical writing-mode on subject)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqmax unit resolves against appropriate container (vertical writing-mode on subject)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqw unit resolves against appropriate container (vertical writing-mode on container)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqh unit resolves against appropriate container (vertical writing-mode on container)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqi unit resolves against appropriate container (vertical writing-mode on container)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqb unit resolves against appropriate container (vertical writing-mode on container)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqmin unit resolves against appropriate container (vertical writing-mode on container)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "cqmax unit resolves against appropriate container (vertical writing-mode on container)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/counters-flex-circular.html": {
+    "#item1, #container, and #inner should all have the same width: 150": {
+      "passing": [["Chrome", "79.0"]],
+      "failing": []
+    },
+    "The container query should match the layed out width": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "The sum of the item widths should match the flexbox width": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "The size of the flex item #2 should be given by its contents": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "#item1, #container, and #inner should all have the same width: 175": {
+      "passing": [["Chrome", "80.0"]],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/display-contents.html": {
+    "getComputedStyle when container is display:contents": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when container becomes display:contents": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when intermediate container becomes display:contents": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/display-none.html": {
+    "getComputedStyle when element is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when parent is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when ancestor is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when container is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when element in nested container is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when inner container is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when intermediate ancestor is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when outer container is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when element becomes display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when parent becomes display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when ancestor becomes display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when container becomes display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when intermediate container becomes display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when ::before is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when originating element is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle on ::before when ancestor element is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle on ::before when container is display:none": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "getComputedStyle when in display:none with layout dirty outer element": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/font-relative-units-dynamic.html": {
+    "em units respond to changes": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "rem units respond to changes": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/font-relative-units.html": {
+    "em relative inline-size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "rem relative inline-size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/fragmented-container-001.html": {
+    "Children of fragmented inline-size container should match inline-size of first fragment": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/grid-container.html": {
+    "Check that grid items can query grid container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/grid-item-container.html": {
+    "Check that children can query grid item containers": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/ineligible-containment.html": {
+    "Container ineligible for containment": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Changing containment eligibility invalidates style": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/inline-size-and-min-width.html": {
+    "min-width of inline-size container affects container size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/inline-size-containment-vertical-rl.html": {
+    "inline-size containment only": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/inline-size-containment.html": {
+    "inline-size containment only": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/layout-dependent-focus.html": {
+    "Verify that onblur is called on hidden input": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/multicol-container-001.html": {
+    "Children of multicol inline-size container should match inline-size of the container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/never-match-container.html": {
+    "Size @container query against inline box never matches": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Size @container query against svg element never matches": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/orthogonal-wm-container-query.html": {
+    "Initial non-orthogonal width": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Orthogonal width": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/pseudo-elements-001.html": {
+    "Pseudo-elements ::before and ::after respond to container size changes": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Pseudo-element ::marker responds to container size changes": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/pseudo-elements-003.html": {
+    "Originating element container for ::before": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Originating element container for ::after": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Originating element container for ::first-line": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Originating element container for ::first-letter": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Originating element container for outer ::first-line": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Originating element container for outer ::first-letter": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Originating element container for ::backdrop": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Originating element container for ::marker": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/query-content-box.html": {
+    "Size queries with content-box sizing": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Size queries with border-box sizing": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Size queries with content-box sizing and overflow:scroll": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Size queries with border-box sizing and overflow:scroll": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/query-evaluation.html": {
+    "(width)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(unknown)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "unknown(width)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((unknown))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((((width))))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((((height))))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((((unknown))))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(not (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(not (height))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(not (unknown))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(not unknown(width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) and (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) and (width) and (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height) and (height))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height) and (width) and (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) and (height) and (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) and (width) and (height))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((unknown) and (width) and (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) and (unknown) and (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) and (width) and (unknown))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) or (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) or (width) or (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height) or (height))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height) or (width) or (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) or (height) or (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) or (width) or (height))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((unknown) or (width) or (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) or (unknown) or (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) or (width) or (unknown))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((unknown) or (height) or (width))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(not ((width) and (width)))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(not ((width) and (height)))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width) and (not ((height) or (width))))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height) or (not ((height) and (width))))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height) or ((height) and (width)))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "unknown((width: 1px))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/reattach-container-with-dirty-child.html": {
+    "Initially wider than 200px": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Container query changed and inner.style applied": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/sibling-layout-dependency.html": {
+    "Sibling style mutation": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Sibling style mutation, parent is affected": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Sibling style mutation, ancestor is affected": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Sibling text mutation": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/size-container-no-principal-box.html": {
+    "Check that container queries is supported": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-width: 0) does not match a container without a principal box (display:none)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-width: 0) does not match a container without a principal box (display:contents)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/size-feature-evaluation.html": {
+    "(width < 100px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(width >= 100px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-width: 100px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-width: 101px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-width: 100px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-width: 99px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height < 200px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height >= 200px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-height: 200px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-height: 201px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-height: 200px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-height: 199px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(inline-size < 100px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(inline-size >= 100px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-inline-size: 100px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-inline-size: 101px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-inline-size: 100px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-inline-size: 99px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(block-size < 200px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(block-size >= 200px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-block-size: 200px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-block-size: 201px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-block-size: 200px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-block-size: 199px) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(orientation: landscape) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(orientation: portrait) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(aspect-ratio: 1/2) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(aspect-ratio: 2/1) (.horizontal)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(width < 100px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(width >= 100px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-width: 100px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-width: 101px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-width: 100px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-width: 99px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height < 200px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height >= 200px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-height: 200px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-height: 201px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-height: 200px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-height: 199px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(block-size < 100px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(block-size >= 100px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-block-size: 100px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-block-size: 101px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-block-size: 100px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-block-size: 99px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(inline-size < 200px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(inline-size >= 200px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-inline-size: 200px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(min-inline-size: 201px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-inline-size: 200px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(max-inline-size: 199px) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(orientation: landscape) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(orientation: portrait) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(aspect-ratio: 1/2) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(aspect-ratio: 2/1) (.vertical)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/style-change-in-container.html": {
+    "Basic test for container query evaluation stability": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/svg-foreignobject-child-container.html": {
+    "#inner querying #container inside foreignObject": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/svg-root-size-container.html": {
+    "SVG text querying SVG root size container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "div in foreignObject querying SVG root size container": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/top-layer-dialog-container.html": {
+    "#dialog initially sized by #containing-block": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "#dialog sized by viewport": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/top-layer-dialog.html": {
+    "#container initially wider than 200px": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "#container changed to 200px": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Modal dialog still has parent as query container while in top layer": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Container changes width while dialog is in top layer": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/top-layer-nested-dialog.html": {
+    "Dialogs initially not matching for container queries": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "Dialogs still not matching after showModal": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "@container queries start matching": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/transition-scrollbars.html": {
+    "Scrollbars do not cause a transition of background-color": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/unsupported-axis.html": {
+    "(width > 0px)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(height > 0px)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height > 0px) or (width > 0px))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width > 0px) or (height > 0px))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((orientation: landscape) or (width > 0px))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((width > 0px) or (orientation: landscape))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height > 0px) or (orientation: landscape))": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "((height > 0px) or (orientation: landscape)), with contain:size": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(inline-size > 0px)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(block-size > 0px)": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    },
+    "(block-size > 0px), with writing-mode:vertical-rl": {
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
+      "failing": []
+    }
+  },
+  "/css/css-contain/container-queries/animation-container-size.html": {
+    "Animation affects container query evaluation": {
+      "passing": [],
+      "failing": [["Chrome", "79.0"]]
+    }
+  },
+  "/css/css-contain/container-queries/animation-container-type-dynamic.html": {
+    "Animated container creating new container": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/animation-nested-animation.html": {
+    "Animated container can create inner animation": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/animation-nested-transition.html": {
+    "Animated container size triggers transition": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/get-animations.html": {
+    "Calling getAnimations updates layout of parent frame if needed": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/pseudo-elements-004.html": {
+    "Initial color for ::before": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Color for ::before depending on container": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Initial color for ::after": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Color for ::after depending on container": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Initial color for ::marker": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Color for ::marker depending on container": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Initial color for ::first-line": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Color for ::first-line depending on container": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Initial color for ::first-letter": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Color for ::first-letter depending on container": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Initial color for ::backdrop": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    },
+    "Color for ::backdrop depending on container": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  },
+  "/css/css-contain/container-queries/transition-style-change-event.html": {
+    "Container Queries - Style Change Event for transitions": {
+      "passing": [],
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
+    }
+  }
+}
