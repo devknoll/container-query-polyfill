@@ -54,54 +54,10 @@ export interface BrowserDefinition {
   versions: BrowserVersion[];
 }
 
-const TEST_FILTERS: Array<RegExp> = [
-  /-serialization.html$/,
-  /-computed.html$/,
-  /calc-evaluation.html$/,
-  /auto-scrollbars.html$/,
-
-  /container-inheritance.html$/,
-  /container-for-shadow-dom.html$/,
-  /container-units-shadow.html$/,
-  /container-longhand-animation-type.html$/,
-  /container-name-invalidation.html$/,
-  /container-name-parsing.html$/,
-  /container-parsing.html$/,
-  /container-type-containment.html$/,
-  /container-type-layout-invalidation.html$/,
-  /container-type-parsing.html$/,
-  /container-units-basic.html$/,
-  /container-units-in-at-container-fallback.html$/,
-  /container-units-invalidation.html$/,
-  /container-units-media-queries.html$/,
-  /container-units-selection.html$/,
-  /container-units-small-viewport-fallback.html$/,
-  /container-units-svglength.html$/,
-  /container-units-typed-om.html$/,
-  /deep-nested-inline-size-containers.html$/,
-  /idlharness.html$/,
-  /iframe-in-container-invalidation.html$/,
-  /iframe-invalidation.html$/,
-  /percentage-padding-orthogonal.html$/,
-  /viewport-units-dynamic.html$/,
-  /viewport-units.html$/,
-];
-
-const SUBTEST_FILTERS: Array<RegExp> = [
-  /calc\(.*\)/,
-  /max\(.*\)/,
-  /style\(.*\)/,
-  /#container width 399px after padding is applied. #second is removed from the rendering/,
-  /ex units/,
-  /ch units/,
-  /ex relative/,
-  /ch relative/,
-];
-
 const CHROME_DEFINITION: BrowserDefinition = {
   name: 'Chrome',
   logo: 'https://unpkg.com/@browser-logos/chrome@2.0.0/chrome.svg',
-  versions: Array.from({length: 104 - 102 /*79*/})
+  versions: Array.from({length: 105 - 79})
     .map((_, i) => 79 + i)
     .filter(version => ![82].includes(version))
     .map(version => `${version}.0`)
@@ -112,7 +68,6 @@ const CHROME_DEFINITION: BrowserDefinition = {
         capabilities: {
           'bstack:options': {
             os: 'OS X',
-            osVersion: 'Monterey',
           },
           browserName: 'Chrome',
           browserVersion: browserVersion,
@@ -126,14 +81,14 @@ const SAFARI_IOS_DEFINITION: BrowserDefinition = {
   logo: 'https://unpkg.com/@browser-logos/safari-ios@1.0.15/safari-ios.svg',
   versions: (
     [
-      // ['13.7', '13.7'],
-      // ['14.0', '14'],
-      // ['14.1', '14'],
-      // ['15.0', '15'],
-      // ['15.2', '15'],
-      // ['15.4', '15'],
-      // ['15.5', '15'],
-      // ['15.6', '15'],
+      ['13.7', '13.7'],
+      ['14.0', '14'],
+      ['14.1', '14'],
+      ['15.0', '15'],
+      ['15.2', '15'],
+      ['15.4', '15'],
+      ['15.5', '15'],
+      ['15.6', '15'],
     ] as Array<[string, string]>
   ).map(([browserVersion, osVersion]) => ({
     name: browserVersion,
@@ -156,9 +111,9 @@ const SAFARI_MACOS_DEFINITION: BrowserDefinition = {
   logo: 'https://unpkg.com/@browser-logos/safari-ios@1.0.15/safari-ios.svg',
   versions: (
     [
-      // ['13.1', 'Catalina'],
-      // ['14.1', 'Big Sur'],
-      // ['15.3', 'Monterey'],
+      ['13.1', 'Catalina'],
+      ['14.1', 'Big Sur'],
+      ['15.3', 'Monterey'],
     ] as Array<[string, string]>
   ).map(([browserVersion, osVersion]) => ({
     name: browserVersion,
@@ -179,7 +134,7 @@ const SAFARI_MACOS_DEFINITION: BrowserDefinition = {
 const EDGE_DEFINITION: BrowserDefinition = {
   name: 'Edge',
   logo: 'https://unpkg.com/@browser-logos/edge@2.0.5/edge.svg',
-  versions: Array.from({length: 104 - 104 /*80*/})
+  versions: Array.from({length: 105 - 80})
     .map((_, i) => 80 + i)
     .filter(version => ![82].includes(version))
     .map(version => `${version}.0`)
@@ -190,7 +145,6 @@ const EDGE_DEFINITION: BrowserDefinition = {
         capabilities: {
           'bstack:options': {
             os: 'OS X',
-            osVersion: 'Monterey',
           },
           browserName: 'Edge',
           browserVersion,
@@ -202,7 +156,7 @@ const EDGE_DEFINITION: BrowserDefinition = {
 const FIREFOX_DEFINITION: BrowserDefinition = {
   name: 'Firefox',
   logo: 'https://unpkg.com/@browser-logos/firefox@3.0.9/firefox.svg',
-  versions: Array.from({length: 103 - 103 /*69*/})
+  versions: Array.from({length: 105 - 69})
     .map((_, i) => 69 + i)
     .map(version => `${version}.0`)
     .map(browserVersion => ({
@@ -212,7 +166,6 @@ const FIREFOX_DEFINITION: BrowserDefinition = {
         capabilities: {
           'bstack:options': {
             os: 'OS X',
-            osVersion: 'Monterey',
           },
           browserName: 'Firefox',
           browserVersion,
@@ -279,22 +232,22 @@ async function getTests(manifestPath: string): Promise<TestSuite> {
   const prefix = `css/css-contain/container-queries`;
   const htmlTests =
     manifest.items.testharness.css['css-contain']['container-queries'];
-  const refTests =
-    manifest.items.reftest.css['css-contain']['container-queries'];
+  // const refTests =
+  //   manifest.items.reftest.css['css-contain']['container-queries'];
 
   const iframe: Array<[string, string]> = [];
-  Object.keys(refTests).forEach((name, id) => {
-    const data = refTests[name][1][1][0];
-    iframe.push(
-      [`ref${id}_test`, `http://web-platform.test:8000/${prefix}/${name}`],
-      [`ref${id}_match`, `http://web-platform.test:8000/${data[0]}`]
-    );
-  });
+  // Object.keys(refTests).forEach((name, id) => {
+  //   const data = refTests[name][1][1][0];
+  //   iframe.push(
+  //     [`ref${id}_test`, `http://web-platform.test:8000/${prefix}/${name}`],
+  //     [`ref${id}_match`, `http://web-platform.test:8000/${data[0]}`]
+  //   );
+  // });
 
   return {
-    js: Object.keys(htmlTests)
-      .filter(name => !TEST_FILTERS.some(filter => filter.test(name)))
-      .map(name => `http://web-platform.test:8000/${prefix}/${name}`),
+    js: Object.keys(htmlTests).map(
+      name => `http://web-platform.test:8000/${prefix}/${name}`
+    ),
     iframe,
   };
 }
@@ -319,6 +272,7 @@ function createWebDriver(capabilities: Record<string, unknown>) {
           local: true,
           debug: true,
           consoleLogs: 'verbose',
+          telemetryLogs: true,
           networkLogs: true,
           seleniumVersion: '4.1.0',
         },
@@ -351,10 +305,7 @@ async function runTestSuite(
     );
 
     const resultsElem = await driver.wait(
-      until.elementLocated(By.id('__test_results__')),
-      3 * 60 * 1000,
-      'Timed out',
-      5 * 1000
+      until.elementLocated(By.id('__test_results__'))
     );
     const result = JSON.parse(await resultsElem.getAttribute('innerHTML'));
     console.info(`[${name}] Finished successfully`);
@@ -364,7 +315,6 @@ async function runTestSuite(
     throw err;
   } finally {
     try {
-      await driver.close();
       await driver.quit();
     } catch {
       // Some buggy WebDriver implementations could fail during closing,
@@ -401,7 +351,7 @@ async function main() {
           const results = await tryOrDefault(
             async () =>
               await retry(
-                10,
+                15,
                 async () =>
                   await runTestSuite(
                     `${browser.name} ${version.name}`,
@@ -419,9 +369,6 @@ async function main() {
             const testURL = new URL(test[0]);
             if (Array.isArray(test) && Array.isArray(test[1].tests)) {
               for (const subtest of test[1].tests) {
-                if (SUBTEST_FILTERS.some(filter => filter.test(subtest.name))) {
-                  continue;
-                }
                 const result = {test: testURL.pathname, subtest: subtest.name};
                 const destination =
                   subtest.status === subtest.PASS ? passed : failed;
@@ -450,7 +397,6 @@ async function main() {
     join(dirname(fileURLToPath(import.meta.url)), 'results.json'),
     output
   );
-  console.warn(output);
 }
 
 try {

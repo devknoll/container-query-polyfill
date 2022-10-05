@@ -3,7 +3,7 @@ name: release-please
 on:
   push:
     branches:
-      - main
+      - x-rework-test-results
 
 jobs:
   release-please:
@@ -21,6 +21,8 @@ jobs:
           node-version: '16.x'
         if: ${{ steps.release.outputs.release_created }}
       - run: npm install
+        if: ${{ steps.release.outputs.release_created }}
+      - run: npm run build
         if: ${{ steps.release.outputs.release_created }}
 
       - uses: actions/setup-node@v3
