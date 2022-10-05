@@ -693,7 +693,10 @@
   },
   "/css/css-contain/container-queries/counters-flex-circular.html": {
     "#item1, #container, and #inner should all have the same width: 150": {
-      "passing": [["Chrome", "79.0"]],
+      "passing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ],
       "failing": []
     },
     "The container query should match the layed out width": {
@@ -716,10 +719,6 @@
         ["Chrome", "79.0"],
         ["Chrome", "80.0"]
       ]
-    },
-    "#item1, #container, and #inner should all have the same width: 175": {
-      "passing": [["Chrome", "80.0"]],
-      "failing": []
     }
   },
   "/css/css-contain/container-queries/display-contents.html": {
@@ -1839,32 +1838,20 @@
       "failing": []
     },
     "(orientation: landscape) (.vertical)": {
-      "passing": [
-        ["Chrome", "79.0"],
-        ["Chrome", "80.0"]
-      ],
-      "failing": []
+      "passing": [["Chrome", "80.0"]],
+      "failing": [["Chrome", "79.0"]]
     },
     "(orientation: portrait) (.vertical)": {
-      "passing": [
-        ["Chrome", "79.0"],
-        ["Chrome", "80.0"]
-      ],
-      "failing": []
+      "passing": [["Chrome", "80.0"]],
+      "failing": [["Chrome", "79.0"]]
     },
     "(aspect-ratio: 1/2) (.vertical)": {
-      "passing": [
-        ["Chrome", "79.0"],
-        ["Chrome", "80.0"]
-      ],
-      "failing": []
+      "passing": [["Chrome", "80.0"]],
+      "failing": [["Chrome", "79.0"]]
     },
     "(aspect-ratio: 2/1) (.vertical)": {
-      "passing": [
-        ["Chrome", "79.0"],
-        ["Chrome", "80.0"]
-      ],
-      "failing": []
+      "passing": [["Chrome", "80.0"]],
+      "failing": [["Chrome", "79.0"]]
     }
   },
   "/css/css-contain/container-queries/style-change-in-container.html": {
@@ -2061,7 +2048,10 @@
   "/css/css-contain/container-queries/animation-container-size.html": {
     "Animation affects container query evaluation": {
       "passing": [],
-      "failing": [["Chrome", "79.0"]]
+      "failing": [
+        ["Chrome", "79.0"],
+        ["Chrome", "80.0"]
+      ]
     }
   },
   "/css/css-contain/container-queries/animation-container-type-dynamic.html": {
