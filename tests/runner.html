@@ -44,23 +44,32 @@
 
         const results = [];
         for (const test of tests.js) {
-          testHarness.src = test;
+          testHarness.src = '';
 
-          const res = await Promise.race([
-            nextEvent(
-              window,
-              'message',
-              message => message.data.type === 'complete'
-            ).then(message => message.data),
-            timeout(15 * 1000).then(_ => []),
-          ]);
+          while (true) {
+            try {
+              testHarness.src = test;
+              const res = await Promise.race([
+                nextEvent(
+                  window,
+                  'message',
+                  message => message.data.type === 'complete'
+                ).then(message => message.data),
+                timeout(15 * 1000).then(_ => []),
+              ]);
 
-          results.push([test, res]);
+              results.push([test, res]);
+              break;
+            } catch {
+              continue;
+            }
+          }
         }
 
-        const scriptElem = document.createElement('script');
+        iframe.remove();
+        const scriptElem = document.createElement('code');
         scriptElem.setAttribute('id', '__test_results__');
-        scriptElem.text = JSON.stringify(results);
+        scriptElem.innerText = JSON.stringify(results);
         document.body.appendChild(scriptElem);
       }
 

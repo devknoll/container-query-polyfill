@@ -187,6 +187,7 @@ const allTestNames = new Set(
 );
 const summaryLines: string[] = [];
 
+let hasRegressions = false;
 for (const test of allTestNames) {
   const currentSubtests = currentTestMap[test];
   const previousSubtests = previousTestMap[test];
@@ -224,7 +225,7 @@ for (const test of allTestNames) {
       let summary: string | null = null;
 
       if (!after) {
-        summary = '(Removed)';
+        summary = '(removed)';
       } else {
         const diffLines: string[] = [];
         for (const browser of allBrowsers) {
@@ -233,6 +234,10 @@ for (const test of allTestNames) {
 
           if (isPassing === wasPassing) {
             continue;
+          }
+
+          if (wasPassing && !isPassing) {
+            hasRegressions = true;
           }
 
           const prefix = isPassing ? '+' : '-';
@@ -282,32 +287,43 @@ ${testSummary.join('\n')}
   }
 }
 
-if (summaryLines.length > 0) {
-  const commentLines: string[] = [];
+const commentLines: string[] = [];
+let changed = hasRegressions;
+
+if (process.env.SCHEDULED_BASELINE_DIFF) {
+  changed = changed || summaryLines.length > 0;
   commentLines.push(
-    'The [Web Platform Test](https://web-platform-tests.org/) results have changed from the expected baseline. The baseline may be updated by merging this pull request.'
-  );
-
-  if (missingBrowsers.size > 0) {
-    commentLines.push(
-      '',
-      `
-  > **Warning**
-  > The test run was missing data for the following browsers:
-  >
-  ${Array.from(missingBrowsers)
-    .map(browser => `>   * ${browser}`)
-    .join('\n')}
-  >
-  > Therefore I couldn't confirm the expected tests are still passing.
-      `
-    );
-  }
-
-  commentLines.push('', '# Test Results', ...summaryLines);
-  await writeFile(getPathForFile('pr.txt'), commentLines.join('\n'));
-  await writeFile(
-    getPathForFile('baseline.json'),
-    JSON.stringify(currentTestMap)
+    'The [Web Platform Test](https://web-platform-tests.org/) results have changed from the expected baseline. You may accept these changes by merging this pull request.'
   );
 }
+
+if (missingBrowsers.size > 0) {
+  if (!process.env.SCHEDULED_BASELINE_DIFF) {
+    changed = true;
+  }
+  commentLines.push(
+    '',
+    `
+> **Warning**
+> The test run was missing data for the following browsers:
+>
+${Array.from(missingBrowsers)
+  .map(browser => `>   * ${browser}`)
+  .join('\n')}
+>
+> The test results for these browsers couldn't be confirmed.
+    `
+  );
+}
+
+const results =
+  summaryLines.length > 0 ? summaryLines : ['No changes detected.'];
+commentLines.push('', '# Test Results', ...results);
+
+await writeFile(getPathForFile('pr.txt'), commentLines.join('\n'));
+await writeFile(
+  getPathForFile('baseline.json'),
+  JSON.stringify(currentTestMap)
+);
+
+process.stdout.write(changed ? 'changed' : 'unchanged');
