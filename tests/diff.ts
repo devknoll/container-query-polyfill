@@ -224,7 +224,7 @@ for (const test of allTestNames) {
       let summary: string | null = null;
 
       if (!after) {
-        summary = '(Removed)';
+        summary = '(removed)';
       } else {
         const diffLines: string[] = [];
         for (const browser of allBrowsers) {
@@ -284,9 +284,12 @@ ${testSummary.join('\n')}
 
 if (summaryLines.length > 0) {
   const commentLines: string[] = [];
-  commentLines.push(
-    'The [Web Platform Test](https://web-platform-tests.org/) results have changed from the expected baseline. The baseline may be updated by merging this pull request.'
-  );
+
+  if (process.env.SCHEDULED_BASELINE_DIFF) {
+    commentLines.push(
+      'The [Web Platform Test](https://web-platform-tests.org/) results have changed from the expected baseline. You may accept these changes by merging this pull request.'
+    );
+  }
 
   if (missingBrowsers.size > 0) {
     commentLines.push(
@@ -305,9 +308,12 @@ if (summaryLines.length > 0) {
   }
 
   commentLines.push('', '# Test Results', ...summaryLines);
+
   await writeFile(getPathForFile('pr.txt'), commentLines.join('\n'));
   await writeFile(
     getPathForFile('baseline.json'),
     JSON.stringify(currentTestMap)
   );
+
+  process.exit(1);
 }

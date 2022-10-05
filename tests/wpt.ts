@@ -54,50 +54,6 @@ export interface BrowserDefinition {
   versions: BrowserVersion[];
 }
 
-const TEST_FILTERS: Array<RegExp> = [
-  /-serialization.html$/,
-  /-computed.html$/,
-  /calc-evaluation.html$/,
-  /auto-scrollbars.html$/,
-
-  /container-inheritance.html$/,
-  /container-for-shadow-dom.html$/,
-  /container-units-shadow.html$/,
-  /container-longhand-animation-type.html$/,
-  /container-name-invalidation.html$/,
-  /container-name-parsing.html$/,
-  /container-parsing.html$/,
-  /container-type-containment.html$/,
-  /container-type-layout-invalidation.html$/,
-  /container-type-parsing.html$/,
-  /container-units-basic.html$/,
-  /container-units-in-at-container-fallback.html$/,
-  /container-units-invalidation.html$/,
-  /container-units-media-queries.html$/,
-  /container-units-selection.html$/,
-  /container-units-small-viewport-fallback.html$/,
-  /container-units-svglength.html$/,
-  /container-units-typed-om.html$/,
-  /deep-nested-inline-size-containers.html$/,
-  /idlharness.html$/,
-  /iframe-in-container-invalidation.html$/,
-  /iframe-invalidation.html$/,
-  /percentage-padding-orthogonal.html$/,
-  /viewport-units-dynamic.html$/,
-  /viewport-units.html$/,
-];
-
-const SUBTEST_FILTERS: Array<RegExp> = [
-  /calc\(.*\)/,
-  /max\(.*\)/,
-  /style\(.*\)/,
-  /#container width 399px after padding is applied. #second is removed from the rendering/,
-  /ex units/,
-  /ch units/,
-  /ex relative/,
-  /ch relative/,
-];
-
 const CHROME_DEFINITION: BrowserDefinition = {
   name: 'Chrome',
   logo: 'https://unpkg.com/@browser-logos/chrome@2.0.0/chrome.svg',
@@ -293,7 +249,6 @@ async function getTests(manifestPath: string): Promise<TestSuite> {
 
   return {
     js: Object.keys(htmlTests)
-      .filter(name => !TEST_FILTERS.some(filter => filter.test(name)))
       .map(name => `http://web-platform.test:8000/${prefix}/${name}`),
     iframe,
   };
@@ -419,9 +374,6 @@ async function main() {
             const testURL = new URL(test[0]);
             if (Array.isArray(test) && Array.isArray(test[1].tests)) {
               for (const subtest of test[1].tests) {
-                if (SUBTEST_FILTERS.some(filter => filter.test(subtest.name))) {
-                  continue;
-                }
                 const result = {test: testURL.pathname, subtest: subtest.name};
                 const destination =
                   subtest.status === subtest.PASS ? passed : failed;
