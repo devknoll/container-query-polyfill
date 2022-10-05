@@ -284,9 +284,12 @@ ${testSummary.join('\n')}
 
 if (summaryLines.length > 0) {
   const commentLines: string[] = [];
-  commentLines.push(
-    'The [Web Platform Test](https://web-platform-tests.org/) results have changed from the expected baseline. The baseline may be updated by merging this pull request.'
-  );
+
+  if (process.env.SCHEDULED_BASELINE_DIFF) {
+    commentLines.push(
+      'The [Web Platform Test](https://web-platform-tests.org/) results have changed from the expected baseline. The baseline may be updated by merging this pull request.'
+    );
+  }
 
   if (missingBrowsers.size > 0) {
     commentLines.push(
