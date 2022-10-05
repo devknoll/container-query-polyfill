@@ -1,10 +1,10 @@
-name: Build & Test
+name: Update WPT Baseline
 
 on:
-  push:
+  workflow_dispatch:
     branches: [main]
-  pull_request:
-    types: [opened, synchronize]
+  schedule:
+    - cron: '0 0 * * 1'
 
 jobs:
   build:
@@ -43,3 +43,16 @@ jobs:
           ./wpt/wpt manifest
           ./wpt/wpt serve --inject-script=${{ github.workspace }}/dist/container-query-polyfill.modern.js &
           npm test
+
+      - name: Open Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node --loader ts-node/esm ./tests/diff.ts
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -b update-wpt-baseline-$(date +"%Y-%m-%d")
+          git add ./tests/baseline.json
+          git commit -m "Update Web Platform Test baseline"
+          git push -u origin HEAD
+          gh pr create --title "[Automated] Update Web Platform Tests" --body-file ./tests/pr.txt --label "update-baseline"
