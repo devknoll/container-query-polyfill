@@ -380,6 +380,10 @@ async function main() {
           }
 
           result.data = {type: DataType.Result, result: [passed, failed]};
+          (result as any).raw = {
+            name: `${browser.name} ${version.name}`,
+            results,
+          };
         }
       });
       return result;

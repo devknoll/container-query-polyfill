@@ -12,6 +12,18 @@
  */
 
 export function initializeForWPT() {
+  if (!window.opener) {
+    // HACK: When we're running in WPT, we don't have an opener,
+    // but we do have a parent. We should really do this hack
+    // from tests/runner.html instead.
+    window.opener = window;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).testharness_properties = {
+      output: true,
+      timeout_multiplier: 100,
+    };
+  }
+
   window.addEventListener('error', e => {
     e.stopImmediatePropagation();
   });
@@ -23,9 +35,7 @@ export function initializeForWPT() {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                resolve();
-              });
+              resolve();
             });
           });
         });
